@@ -5,6 +5,7 @@ import 'core/supabase_config.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/admin_dashboard_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +45,7 @@ class IronPulseApp extends StatelessWidget {
       routes: {
         '/auth': (context) => const AuthScreen(),
         '/home': (context) => const HomeScreen(athleteName: 'Javier'),
+        '/admin': (context) => const AdminDashboardScreen(),
       },
     );
   }

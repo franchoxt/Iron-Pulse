@@ -8,7 +8,7 @@ import '../widgets/custom_text_field.dart';
 import '../widgets/neon_button.dart';
 import '../widgets/social_buttons.dart';
 import '../widgets/auth_segmented_switch.dart';
-import 'home_screen.dart';
+import 'admin_dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback onNavigateToRegister;
@@ -87,7 +87,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (email.isEmpty || password.isEmpty) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => const HomeScreen(athleteName: 'Javier'),
+          builder: (_) => const AdminDashboardScreen(adminName: 'Admin'),
         ),
       );
       return;
@@ -118,8 +118,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => HomeScreen(
-            athleteName: userName.isNotEmpty ? userName : 'Javier',
+          builder: (_) => AdminDashboardScreen(
+            adminName: userName.isNotEmpty ? userName : 'Admin',
           ),
         ),
       );
