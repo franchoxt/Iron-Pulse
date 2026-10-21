@@ -123,19 +123,36 @@ ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de lectura pública para catálogo del gimnasio
+DROP POLICY IF EXISTS "Lectura pública de categorías" ON categories;
 CREATE POLICY "Lectura pública de categorías" ON categories FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Lectura pública de instructores" ON instructors;
 CREATE POLICY "Lectura pública de instructores" ON instructors FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Lectura pública de clases" ON classes;
 CREATE POLICY "Lectura pública de clases" ON classes FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Lectura pública de horarios" ON class_schedules;
 CREATE POLICY "Lectura pública de horarios" ON class_schedules FOR SELECT USING (true);
 
 -- Políticas de Perfiles
+DROP POLICY IF EXISTS "Usuarios pueden leer perfiles" ON profiles;
 CREATE POLICY "Usuarios pueden leer perfiles" ON profiles FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Usuarios pueden editar su propio perfil" ON profiles;
 CREATE POLICY "Usuarios pueden editar su propio perfil" ON profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
 
 -- Políticas de Reservas
+DROP POLICY IF EXISTS "Usuarios ven sus propias reservas" ON bookings;
 CREATE POLICY "Usuarios ven sus propias reservas" ON bookings FOR SELECT TO authenticated USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Usuarios crean sus propias reservas" ON bookings;
 CREATE POLICY "Usuarios crean sus propias reservas" ON bookings FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Usuarios actualizan sus propias reservas" ON bookings;
 CREATE POLICY "Usuarios actualizan sus propias reservas" ON bookings FOR UPDATE TO authenticated USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Usuarios eliminan sus propias reservas" ON bookings;
 CREATE POLICY "Usuarios eliminan sus propias reservas" ON bookings FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
 -- ==============================================================================
@@ -189,7 +206,7 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO class_schedules (id, class_id, instructor_id, start_time, end_time, capacity, location_name, is_live) VALUES
   (
-    's1111111-1111-1111-1111-111111111111',
+    '11111111-1111-1111-1111-111111111111',
     'f1111111-1111-1111-1111-111111111111',
     'e1111111-1111-1111-1111-111111111111',
     timezone('utc', now() + interval '2 hours'),
@@ -199,7 +216,7 @@ INSERT INTO class_schedules (id, class_id, instructor_id, start_time, end_time, 
     false
   ),
   (
-    's2222222-2222-2222-2222-222222222222',
+    '22222222-2222-2222-2222-222222222222',
     'f2222222-2222-2222-2222-222222222222',
     'e2222222-2222-2222-2222-222222222222',
     timezone('utc', now() + interval '4 hours'),
@@ -209,7 +226,7 @@ INSERT INTO class_schedules (id, class_id, instructor_id, start_time, end_time, 
     false
   ),
   (
-    's3333333-3333-3333-3333-333333333333',
+    '33333333-3333-3333-3333-333333333333',
     'f3333333-3333-3333-3333-333333333333',
     'e3333333-3333-3333-3333-333333333333',
     timezone('utc', now() + interval '6 hours'),
