@@ -111,19 +111,32 @@ class DatabaseService {
     final client = _client;
     final user = AuthService.instance.currentUser;
 
+    // Sanitizar ID: Si no es un UUID válido (ej. viene de mocks como feat_1), mapearlo a uno real
+    final uuidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+    String validScheduleId = scheduleId;
+    if (!uuidRegex.hasMatch(scheduleId)) {
+      if (scheduleId.contains('2')) {
+        validScheduleId = '22222222-2222-2222-2222-222222222222';
+      } else if (scheduleId.contains('3')) {
+        validScheduleId = '33333333-3333-3333-3333-333333333333';
+      } else {
+        validScheduleId = '11111111-1111-1111-1111-111111111111';
+      }
+    }
+
     if (client != null && user != null) {
       try {
         // 1. Verificar cupos actuales
         final existingBookings = await client
             .from('bookings')
             .select('id, status')
-            .eq('schedule_id', scheduleId)
+            .eq('schedule_id', validScheduleId)
             .eq('status', 'confirmed');
 
         final scheduleData = await client
             .from('class_schedules')
             .select('capacity')
-            .eq('id', scheduleId)
+            .eq('id', validScheduleId)
             .single();
 
         final capacity = scheduleData['capacity'] as int? ?? 15;
@@ -138,7 +151,7 @@ class DatabaseService {
             .from('bookings')
             .insert({
               'user_id': user.id,
-              'schedule_id': scheduleId,
+              'schedule_id': validScheduleId,
               'status': status.toDbString(),
               'is_present': false,
             })
@@ -174,7 +187,7 @@ class DatabaseService {
     return BookingModel(
       id: 'demo-booking-${DateTime.now().millisecondsSinceEpoch}',
       userId: user?.id ?? 'demo-user',
-      scheduleId: scheduleId,
+      scheduleId: validScheduleId,
       status: BookingStatus.confirmed,
       isPresent: false,
       createdAt: DateTime.now(),
@@ -182,10 +195,28 @@ class DatabaseService {
   }
 
   /// Cancelar una reserva
-  Future<void> cancelBooking(String bookingId) async {
+  Future<void> cancelBooking(String bookingOrScheduleId) async {
     final client = _client;
-    if (client != null) {
-      await client.from('bookings').delete().eq('id', bookingId);
+    final user = AuthService.instance.currentUser;
+    if (client != null && user != null) {
+      try {
+        final uuidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+        String targetId = bookingOrScheduleId;
+        if (!uuidRegex.hasMatch(targetId)) {
+          if (targetId.contains('2')) {
+            targetId = '22222222-2222-2222-2222-222222222222';
+          } else if (targetId.contains('3')) {
+            targetId = '33333333-3333-3333-3333-333333333333';
+          } else {
+            targetId = '11111111-1111-1111-1111-111111111111';
+          }
+        }
+        await client
+            .from('bookings')
+            .delete()
+            .or('id.eq.$targetId,schedule_id.eq.$targetId')
+            .eq('user_id', user.id);
+      } catch (_) {}
     }
   }
 

@@ -107,7 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _featuredClasses = [
       // Card 1: CrossFit WOD (Primary Featured)
       FeaturedClassItem(
-        id: 'feat_1',
+        id: '11111111-1111-1111-1111-111111111111',
         title: 'CrossFit WOD',
         tag: 'HIGH INTENSITY',
         tagColor: AppColors.primaryLight,
@@ -125,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       // Card 2: Power Yoga (Peeking Carousel Card)
       FeaturedClassItem(
-        id: 'feat_2',
+        id: '22222222-2222-2222-2222-222222222222',
         title: 'Power Yoga',
         tag: 'FLEXIBILITY',
         tagColor: AppColors.tertiary,
@@ -146,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _upcomingClasses = [
       // Class Card 1: HIIT Advanced
       UpcomingClassItem(
-        id: 'up_1',
+        id: '33333333-3333-3333-3333-333333333333',
         dayLabel: 'TODAY',
         time: '19:00',
         title: 'HIIT Advanced',
@@ -157,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       // Class Card 2: Spin Cycle
       UpcomingClassItem(
-        id: 'up_2',
+        id: '22222222-2222-2222-2222-222222222222',
         dayLabel: 'TOMORROW',
         time: '08:00',
         title: 'Spin Cycle',
@@ -168,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       // Class Card 3: Open Gym
       UpcomingClassItem(
-        id: 'up_3',
+        id: '11111111-1111-1111-1111-111111111111',
         dayLabel: 'FRI',
         time: '12:00',
         title: 'Open Gym',
