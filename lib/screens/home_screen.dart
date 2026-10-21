@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/database_service.dart';
+import 'schedule_view.dart';
+import 'admin_portal_view.dart';
+import 'profile_view.dart';
 
 /// Modelo de clase destacada (Featured Class)
 class FeaturedClassItem {
@@ -186,25 +190,37 @@ class _HomeScreenState extends State<HomeScreen> {
         .toList();
   }
 
-  void _handleBooking(FeaturedClassItem item) {
+  Future<void> _handleBooking(FeaturedClassItem item) async {
+    final wasBooked = item.isBooked;
     setState(() {
-      item.isBooked = !item.isBooked;
+      item.isBooked = !wasBooked;
     });
 
+    try {
+      if (!wasBooked) {
+        await DatabaseService.instance.bookClass(scheduleId: item.id);
+      } else {
+        await DatabaseService.instance.cancelBooking(item.id);
+      }
+    } catch (_) {
+      // Manejo silencioso con persistencia de estado local
+    }
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: item.isBooked
-            ? const Color(0xFF002113)
+            ? AppColors.cardBg
             : AppColors.surfaceContainerHigh,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(
             color: item.isBooked
-                ? AppColors.secondary
-                : AppColors.primaryContainer,
+                ? AppColors.successGreen
+                : AppColors.primaryBlue,
             width: 1.2,
           ),
         ),
@@ -215,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? Icons.check_circle_rounded
                   : Icons.info_outline_rounded,
               color: item.isBooked
-                  ? AppColors.secondary
+                  ? AppColors.successGreen
                   : AppColors.primaryLight,
               size: 20,
             ),
@@ -223,8 +239,10 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: Text(
                 item.isBooked
-                    ? '¡Reserva confirmada para ${item.title} a las ${item.time}!'
-                    : 'Acción actualizada para ${item.title}',
+                    ? (item.hasSpots
+                        ? '¡Reserva confirmada para ${item.title} a las ${item.time}!'
+                        : '¡Añadido a lista de espera para ${item.title}!')
+                    : 'Reserva cancelada para ${item.title}',
                 style: AppTypography.style(
                   color: AppColors.onSurface,
                   fontSize: 13,
@@ -366,38 +384,59 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Widget currentBody;
+    switch (_currentNavIndex) {
+      case 1:
+        currentBody = const ScheduleView();
+        break;
+      case 2:
+        currentBody = const AdminPortalView();
+        break;
+      case 3:
+        currentBody = const ProfileView();
+        break;
+      case 0:
+      default:
+        currentBody = _buildHomeDashboard();
+        break;
+    }
+
     return Scaffold(
-      backgroundColor: const Color(0xFF111319),
-      body: SafeArea(
-        bottom: false,
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: 110),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 8),
+      backgroundColor: AppColors.background,
+      body: currentBody,
+      bottomNavigationBar: _buildBottomNavBar(),
+    );
+  }
 
-              // 1. TopAppBar (Avatar + Saludo "Hola, Javier 👋" + Notificaciones)
-              _buildTopAppBar(),
-              const SizedBox(height: 24),
+  Widget _buildHomeDashboard() {
+    return SafeArea(
+      bottom: false,
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 110),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
 
-              // 2. Featured Classes Section (Title + See All + Swipeable Carousel)
-              _buildFeaturedClassesSection(),
-              const SizedBox(height: 20),
+            // 1. TopAppBar (Avatar + Saludo "Hola, Javier 👋" + Notificaciones)
+            _buildTopAppBar(),
+            const SizedBox(height: 24),
 
-              // 3. Filter Pills Carousel (All Classes, Cardio, Strength, etc.)
-              _buildFilterPillsCarousel(),
-              const SizedBox(height: 24),
+            // 2. Featured Classes Section (Title + See All + Swipeable Carousel)
+            _buildFeaturedClassesSection(),
+            const SizedBox(height: 20),
 
-              // 4. Upcoming Classes Section (Header + Badge 13 + List of 3 Cards)
-              _buildUpcomingClassesSection(),
-              const SizedBox(height: 16),
-            ],
-          ),
+            // 3. Filter Pills Carousel (All Classes, Cardio, Strength, etc.)
+            _buildFilterPillsCarousel(),
+            const SizedBox(height: 24),
+
+            // 4. Upcoming Classes Section (Header + Badge 13 + List of 3 Cards)
+            _buildUpcomingClassesSection(),
+            const SizedBox(height: 16),
+          ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNavBar(),
     );
   }
 
@@ -1262,18 +1301,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               _buildBottomNavItem(
                 index: 1,
-                icon: Icons.calendar_month_outlined,
+                icon: Icons.calendar_month_rounded,
                 label: 'Schedule',
               ),
               _buildBottomNavItem(
                 index: 2,
-                icon: Icons.person_outline_rounded,
-                label: 'Profile',
+                icon: Icons.admin_panel_settings_rounded,
+                label: 'Admin',
               ),
               _buildBottomNavItem(
                 index: 3,
-                icon: Icons.settings_outlined,
-                label: 'Settings',
+                icon: Icons.person_rounded,
+                label: 'Perfil',
               ),
             ],
           ),
@@ -1307,15 +1346,15 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 40,
               decoration: BoxDecoration(
                 color: isSelected
-                    ? AppColors.primaryContainer.withValues(alpha: 0.2)
+                    ? AppColors.primaryBlue.withValues(alpha: 0.2)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
                 color: isSelected
-                    ? AppColors.primaryLight
-                    : AppColors.onSurfaceVariant,
+                    ? AppColors.primaryBlue
+                    : AppColors.navInactive,
                 size: 24,
               ),
             ),
@@ -1324,8 +1363,8 @@ class _HomeScreenState extends State<HomeScreen> {
               label,
               style: AppTypography.style(
                 color: isSelected
-                    ? AppColors.primaryLight
-                    : AppColors.onSurfaceVariant,
+                    ? AppColors.primaryBlue
+                    : AppColors.navInactive,
                 fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
               ),
