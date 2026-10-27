@@ -258,6 +258,47 @@ class DatabaseService {
     return null;
   }
 
+  /// Asegura la existencia del perfil en la tabla 'profiles' con su respectivo rol.
+  /// Por defecto se le asigna automáticamente el rol de cliente (UserRole.client).
+  Future<UserProfileModel?> ensureUserProfile({
+    required String userId,
+    String? fullName,
+    String? avatarUrl,
+    UserRole role = UserRole.client,
+  }) async {
+    final client = _client;
+    if (client != null) {
+      try {
+        final existing = await client
+            .from('profiles')
+            .select()
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (existing != null) {
+          return UserProfileModel.fromJson(existing);
+        }
+
+        final inserted = await client
+            .from('profiles')
+            .insert({
+              'id': userId,
+              if (fullName != null && fullName.isNotEmpty) 'full_name': fullName,
+              if (avatarUrl != null && avatarUrl.isNotEmpty) 'avatar_url': avatarUrl,
+              'role': role.toDbString(),
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .select()
+            .single();
+
+        return UserProfileModel.fromJson(inserted);
+      } catch (e) {
+        debugPrint('Aviso al asegurar perfil en Supabase: $e');
+      }
+    }
+    return null;
+  }
+
   // ===========================================================================
   // 5. ESTADÍSTICAS DEL PORTAL ADMIN (Occupancy Rate & Happening Now)
   // ===========================================================================
@@ -286,6 +327,235 @@ class DatabaseService {
       'happeningNowCount': liveNowCount,
     };
   }
+
+  // ===========================================================================
+  // 6. INSTRUCTORES
+  // ===========================================================================
+  Future<List<InstructorModel>> getInstructors() async {
+    final client = _client;
+    if (client != null) {
+      try {
+        final data = await client
+            .from('instructors')
+            .select()
+            .order('name', ascending: true);
+        final list = (data as List).map((e) => InstructorModel.fromJson(e)).toList();
+        if (list.isNotEmpty) return list;
+      } catch (e) {
+        debugPrint('Aviso: usando instructores demo ($e)');
+      }
+    }
+    return _demoInstructors;
+  }
+
+  // ===========================================================================
+  // 7. CREACIÓN, EDICIÓN Y ELIMINACIÓN DE CLASES Y HORARIOS (Admin)
+  // ===========================================================================
+  Future<ClassScheduleModel> createClassSchedule({
+    required String name,
+    required String description,
+    required String imageUrl,
+    required String instructorId,
+    required DateTime startTime,
+    required DateTime endTime,
+    required int capacity,
+    String? categoryId,
+    ClassIntensity intensity = ClassIntensity.high,
+  }) async {
+    final client = _client;
+    final durationMinutes = endTime.difference(startTime).inMinutes;
+
+    if (client != null) {
+      try {
+        // 1. Insertar la clase (classes)
+        final insertedClass = await client
+            .from('classes')
+            .insert({
+              'name': name,
+              'description': description,
+              'image_url': imageUrl,
+              'duration_minutes': durationMinutes > 0 ? durationMinutes : 60,
+              'intensity': intensity.toDbString(),
+              if (categoryId != null && categoryId.isNotEmpty && categoryId != 'all')
+                'category_id': categoryId,
+            })
+            .select()
+            .single();
+
+        final classId = insertedClass['id'] as String;
+
+        // 2. Insertar el horario (class_schedules)
+        final insertedSchedule = await client
+            .from('class_schedules')
+            .insert({
+              'class_id': classId,
+              'instructor_id': instructorId,
+              'start_time': startTime.toUtc().toIso8601String(),
+              'end_time': endTime.toUtc().toIso8601String(),
+              'capacity': capacity,
+              'location_name': 'Main Studio',
+              'is_live': false,
+            })
+            .select('''
+              id,
+              class_id,
+              instructor_id,
+              start_time,
+              end_time,
+              capacity,
+              location_name,
+              is_live,
+              classes:class_id ( id, name, description, image_url, category_id, intensity, duration_minutes, base_price ),
+              instructors:instructor_id ( id, name, avatar_url, bio, rating )
+            ''')
+            .single();
+
+        return ClassScheduleModel.fromJson(insertedSchedule);
+      } catch (e) {
+        debugPrint('Error creando clase en Supabase: $e');
+      }
+    }
+
+    // Modo local / demo
+    final newId = 'sched-local-${DateTime.now().millisecondsSinceEpoch}';
+    final newClassId = 'class-local-${DateTime.now().millisecondsSinceEpoch}';
+    final instructor = _demoInstructors.firstWhere(
+      (inst) => inst.id == instructorId,
+      orElse: () => _demoInstructors.first,
+    );
+
+    final newSchedule = ClassScheduleModel(
+      id: newId,
+      classId: newClassId,
+      instructorId: instructorId,
+      startTime: startTime,
+      endTime: endTime,
+      capacity: capacity,
+      locationName: 'Main Studio',
+      confirmedBookingsCount: 0,
+      instructor: instructor,
+      gymClass: GymClassModel(
+        id: newClassId,
+        name: name,
+        description: description,
+        imageUrl: imageUrl,
+        durationMinutes: durationMinutes > 0 ? durationMinutes : 60,
+        intensity: intensity,
+        categoryId: categoryId,
+      ),
+    );
+
+    _demoSchedules.insert(0, newSchedule);
+    return newSchedule;
+  }
+
+  Future<ClassScheduleModel> updateClassSchedule({
+    required String scheduleId,
+    required String classId,
+    required String name,
+    required String description,
+    required String imageUrl,
+    required String instructorId,
+    required DateTime startTime,
+    required DateTime endTime,
+    required int capacity,
+    String? categoryId,
+    ClassIntensity intensity = ClassIntensity.high,
+  }) async {
+    final client = _client;
+    final durationMinutes = endTime.difference(startTime).inMinutes;
+
+    if (client != null) {
+      try {
+        // 1. Actualizar la clase (classes)
+        await client.from('classes').update({
+          'name': name,
+          'description': description,
+          'image_url': imageUrl,
+          'duration_minutes': durationMinutes > 0 ? durationMinutes : 60,
+          'intensity': intensity.toDbString(),
+          if (categoryId != null && categoryId.isNotEmpty && categoryId != 'all')
+            'category_id': categoryId,
+        }).eq('id', classId);
+
+        // 2. Actualizar el horario (class_schedules)
+        final updatedSchedule = await client
+            .from('class_schedules')
+            .update({
+              'instructor_id': instructorId,
+              'start_time': startTime.toUtc().toIso8601String(),
+              'end_time': endTime.toUtc().toIso8601String(),
+              'capacity': capacity,
+            })
+            .eq('id', scheduleId)
+            .select('''
+              id,
+              class_id,
+              instructor_id,
+              start_time,
+              end_time,
+              capacity,
+              location_name,
+              is_live,
+              classes:class_id ( id, name, description, image_url, category_id, intensity, duration_minutes, base_price ),
+              instructors:instructor_id ( id, name, avatar_url, bio, rating )
+            ''')
+            .single();
+
+        return ClassScheduleModel.fromJson(updatedSchedule);
+      } catch (e) {
+        debugPrint('Error actualizando clase en Supabase: $e');
+      }
+    }
+
+    // Modo local / demo
+    final instructor = _demoInstructors.firstWhere(
+      (inst) => inst.id == instructorId,
+      orElse: () => _demoInstructors.first,
+    );
+
+    final updated = ClassScheduleModel(
+      id: scheduleId,
+      classId: classId,
+      instructorId: instructorId,
+      startTime: startTime,
+      endTime: endTime,
+      capacity: capacity,
+      locationName: 'Main Studio',
+      instructor: instructor,
+      gymClass: GymClassModel(
+        id: classId,
+        name: name,
+        description: description,
+        imageUrl: imageUrl,
+        durationMinutes: durationMinutes > 0 ? durationMinutes : 60,
+        intensity: intensity,
+        categoryId: categoryId,
+      ),
+    );
+
+    final index = _demoSchedules.indexWhere((s) => s.id == scheduleId);
+    if (index >= 0) {
+      _demoSchedules[index] = updated;
+    }
+    return updated;
+  }
+
+  Future<void> deleteClassSchedule(String scheduleId, {String? classId}) async {
+    final client = _client;
+    if (client != null) {
+      try {
+        await client.from('class_schedules').delete().eq('id', scheduleId);
+        if (classId != null && classId.isNotEmpty) {
+          await client.from('classes').delete().eq('id', classId);
+        }
+      } catch (e) {
+        debugPrint('Error eliminando clase en Supabase: $e');
+      }
+    }
+    _demoSchedules.removeWhere((s) => s.id == scheduleId);
+  }
+
 
   // ===========================================================================
   // DATOS DEMO (Fallback de alta calidad alineado con las reglas)
@@ -387,4 +657,40 @@ class DatabaseService {
       ),
     ),
   ];
+
+  static final List<InstructorModel> _demoInstructors = [
+    const InstructorModel(
+      id: 'e1111111-1111-1111-1111-111111111111',
+      name: 'Alex Johnson',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      bio: 'HIIT & Performance Head Coach',
+      rating: 4.9,
+    ),
+    const InstructorModel(
+      id: 'e2222222-2222-2222-2222-222222222222',
+      name: 'Elena Rostova',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150',
+      bio: 'Especialista en movilidad y Yoga dinámico',
+      rating: 5.0,
+    ),
+    const InstructorModel(
+      id: 'e3333333-3333-3333-3333-333333333333',
+      name: 'Carlos Vega',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+      bio: 'Master trainer de intervalos de alta potencia',
+      rating: 4.8,
+    ),
+    const InstructorModel(
+      id: 'e4444444-4444-4444-4444-444444444444',
+      name: 'Marcus Vance',
+      avatarUrl:
+          'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+      bio: 'Head Coach de CrossFit y levantamiento olímpico',
+      rating: 4.9,
+    ),
+  ];
 }
+

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/supabase_config.dart';
+import '../models/models.dart';
 import '../services/auth_service.dart';
+import '../services/database_service.dart';
+import '../services/user_session_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/neon_button.dart';
@@ -133,6 +136,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (!mounted) return;
 
+      // Asegurar perfil con rol de cliente en base de datos y sincronizar estado global
+      if (response.user != null) {
+        await DatabaseService.instance.ensureUserProfile(
+          userId: response.user!.id,
+          fullName: name,
+          role: UserRole.client,
+        );
+        await UserSessionService.instance.syncUserRole(explicitUserId: response.user!.id);
+      }
+
+      if (!mounted) return;
+
       if (response.session == null) {
         _showFeedback(
           'Account created for $name! Check your email ($email) to verify.',
@@ -146,7 +161,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => HomeScreen(
-            athleteName: name.isNotEmpty ? name : 'Javier',
+            athleteName: UserSessionService.instance.displayName,
           ),
         ),
       );

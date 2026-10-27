@@ -79,7 +79,11 @@ class AuthService {
       final response = await client.auth.signUp(
         email: email.trim(),
         password: password,
-        data: {'full_name': fullName.trim(), 'display_name': fullName.trim()},
+        data: {
+          'full_name': fullName.trim(),
+          'display_name': fullName.trim(),
+          'role': 'client',
+        },
       );
       return response;
     } on AuthException catch (e) {
@@ -135,6 +139,9 @@ class AuthService {
     }
     if (lower.contains('rate limit')) {
       return 'Demasiados intentos. Espera unos momentos antes de volver a intentar.';
+    }
+    if (lower.contains('database error saving new user')) {
+      return 'Error de base de datos en Supabase al registrar usuario. Asegúrate de ejecutar el script assign_client_role_trigger.sql en el SQL Editor de Supabase.';
     }
     return message;
   }

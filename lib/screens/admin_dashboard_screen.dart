@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import 'schedule_view.dart';
 import 'admin_portal_view.dart';
 import 'profile_view.dart';
+import 'create_edit_class_screen.dart';
 
 /// Pantalla Principal del Dashboard de Administrador
 /// Diseñada exactamente según la interfaz de administración de IRON PULSE
@@ -43,208 +44,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         });
       }
     } catch (_) {}
-  }
-
-  void _showCreateClassModal() {
-    final nameController = TextEditingController();
-    final durationController = TextEditingController(text: '60');
-    final capacityController = TextEditingController(text: '20');
-    String selectedIntensity = 'High';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                top: 24,
-                left: 20,
-                right: 20,
-              ),
-              decoration: const BoxDecoration(
-                color: Color(0xFF161A23),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                border: Border(
-                  top: BorderSide(color: Color(0xFF2B3446), width: 1),
-                ),
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: AppColors.borderLight,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Crear Nueva Clase',
-                          style: AppTypography.style(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: nameController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Nombre de la Clase (ej. HIIT w/ Sarah)',
-                        labelStyle: const TextStyle(color: AppColors.textSecondary),
-                        filled: true,
-                        fillColor: const Color(0xFF0F172A),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: Color(0xFF2B3446)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: durationController,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              labelText: 'Duración (min)',
-                              labelStyle: const TextStyle(color: AppColors.textSecondary),
-                              filled: true,
-                              fillColor: const Color(0xFF0F172A),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(color: Color(0xFF2B3446)),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: capacityController,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              labelText: 'Capacidad Cupos',
-                              labelStyle: const TextStyle(color: AppColors.textSecondary),
-                              filled: true,
-                              fillColor: const Color(0xFF0F172A),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(color: Color(0xFF2B3446)),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Intensidad',
-                      style: AppTypography.style(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textLight,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: ['Low', 'Medium', 'High'].map((intensity) {
-                        final isSelected = selectedIntensity == intensity;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(intensity),
-                            selected: isSelected,
-                            onSelected: (val) {
-                              setModalState(() => selectedIntensity = intensity);
-                            },
-                            selectedColor: AppColors.primaryBlue,
-                            backgroundColor: const Color(0xFF0F172A),
-                            labelStyle: TextStyle(
-                              color: isSelected ? Colors.white : AppColors.textSecondary,
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              side: BorderSide(
-                                color: isSelected ? AppColors.primaryBlue : const Color(0xFF2B3446),
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            backgroundColor: AppColors.cardBg,
-                            content: Row(
-                              children: [
-                                const Icon(Icons.check_circle_rounded, color: AppColors.successGreen),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Clase "${nameController.text.isNotEmpty ? nameController.text : 'HIIT'}" creada con éxito',
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryBlue,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(double.infinity, 52),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 4,
-                      ),
-                      child: Text(
-                        'Guardar Clase',
-                        style: AppTypography.style(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
   }
 
   @override
@@ -626,7 +425,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                       ),
-                      onPressed: _showCreateClassModal,
+                      onPressed: () async {
+                        final result = await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const CreateEditClassScreen.create(),
+                          ),
+                        );
+                        if (result != null) {
+                          _loadStats();
+                        }
+                      },
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [

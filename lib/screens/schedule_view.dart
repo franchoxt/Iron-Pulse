@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../services/user_session_service.dart';
 import '../theme/app_theme.dart';
+import 'create_edit_class_screen.dart';
 
 /// Vista de Horarios y Sesiones (Schedule)
 /// Basado en .agents/rules/tablas-supabase.md y guias-de-estilo-y-reglas-de-diseno.md
@@ -344,37 +346,74 @@ class _ScheduleViewState extends State<ScheduleView> {
                                                 ),
                                               ),
                                             ),
-                                            if (schedule.happeningNow || schedule.isLive)
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                                decoration: BoxDecoration(
-                                                  color: AppColors.errorRed.withValues(alpha: 0.3),
-                                                  borderRadius: AppDimensions.chipBorderRadius,
-                                                  border: Border.all(color: AppColors.errorRed),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Container(
-                                                      width: 6,
-                                                      height: 6,
-                                                      decoration: const BoxDecoration(
-                                                        color: AppColors.errorRed,
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                if (schedule.happeningNow || schedule.isLive)
+                                                  Container(
+                                                    margin: const EdgeInsets.only(right: 8),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                    decoration: BoxDecoration(
+                                                      color: AppColors.errorRed.withValues(alpha: 0.3),
+                                                      borderRadius: AppDimensions.chipBorderRadius,
+                                                      border: Border.all(color: AppColors.errorRed),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Container(
+                                                          width: 6,
+                                                          height: 6,
+                                                          decoration: const BoxDecoration(
+                                                            color: AppColors.errorRed,
+                                                            shape: BoxShape.circle,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          'EN VIVO',
+                                                          style: AppTypography.style(
+                                                            color: Colors.white,
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.w700,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                if (UserSessionService.instance.isAdmin)
+                                                  GestureDetector(
+                                                    onTap: () async {
+                                                      final res = await Navigator.of(context).push(
+                                                        MaterialPageRoute(
+                                                          builder: (_) => CreateEditClassScreen.edit(
+                                                            schedule: schedule,
+                                                          ),
+                                                        ),
+                                                      );
+                                                      if (res != null) {
+                                                        _loadData();
+                                                      }
+                                                    },
+                                                    child: Container(
+                                                      padding: const EdgeInsets.all(6),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.black.withValues(alpha: 0.65),
                                                         shape: BoxShape.circle,
+                                                        border: Border.all(
+                                                          color: AppColors.primaryCyan,
+                                                          width: 1.2,
+                                                        ),
+                                                      ),
+                                                      child: const Icon(
+                                                        Icons.edit_rounded,
+                                                        color: AppColors.primaryCyan,
+                                                        size: 15,
                                                       ),
                                                     ),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      'EN VIVO',
-                                                      style: AppTypography.style(
-                                                        color: Colors.white,
-                                                        fontSize: 10,
-                                                        fontWeight: FontWeight.w700,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
+                                                  ),
+                                              ],
+                                            ),
                                           ],
                                         ),
                                       ),
@@ -550,6 +589,31 @@ class _ScheduleViewState extends State<ScheduleView> {
           ),
         ),
       ),
+      floatingActionButton: UserSessionService.instance.isAdmin
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                final res = await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const CreateEditClassScreen.create(),
+                  ),
+                );
+                if (res != null) {
+                  _loadData();
+                }
+              },
+              backgroundColor: AppColors.primaryCyan,
+              foregroundColor: Colors.black,
+              icon: const Icon(Icons.add_rounded),
+              label: Text(
+                'Nueva Clase',
+                style: AppTypography.style(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: Colors.black,
+                ),
+              ),
+            )
+          : null,
     );
   }
 }

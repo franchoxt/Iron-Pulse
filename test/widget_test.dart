@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:iron_pulse/main.dart';
 import 'package:iron_pulse/theme/app_theme.dart';
 import 'package:iron_pulse/screens/auth_screen.dart';
+import 'package:iron_pulse/screens/home_screen.dart';
 
 void main() {
   testWidgets('Smoke test: Verify new LoginScreen and RegisterScreen flow',
@@ -52,14 +52,18 @@ void main() {
     expect(find.text('Access your training schedule.'), findsOneWidget);
   });
 
-  testWidgets('Verify IronPulseApp starts at HomeScreen with new design',
+  testWidgets('Verify HomeScreen renders with athlete greeting and classes',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(tester.view.resetPhysicalSize);
 
-    // App launches on HomeScreen
-    await tester.pumpWidget(const IronPulseApp());
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: const HomeScreen(athleteName: 'Javier'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Hola, Javier'), findsOneWidget);

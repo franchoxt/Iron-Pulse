@@ -90,21 +90,44 @@ CREATE TABLE IF NOT EXISTS messages (
 
 -- ==============================================================================
 -- TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE AL REGISTRARSE
+-- Asigna automáticamente el rol de cliente ('client') en la base de datos
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+  assigned_role public.user_role;
 BEGIN
+  -- Extraer rol de metadata si viene especificado, o asignar 'client' por defecto
+  BEGIN
+    assigned_role := COALESCE(
+      (new.raw_user_meta_data->>'role')::public.user_role,
+      'client'::public.user_role
+    );
+  EXCEPTION WHEN OTHERS THEN
+    assigned_role := 'client'::public.user_role;
+  END;
+
   INSERT INTO public.profiles (id, full_name, avatar_url, role)
   VALUES (
     new.id,
     COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
     COALESCE(new.raw_user_meta_data->>'avatar_url', ''),
-    'client'::user_role
+    assigned_role
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE
+    SET full_name = COALESCE(public.profiles.full_name, EXCLUDED.full_name),
+        role = COALESCE(public.profiles.role, assigned_role),
+        updated_at = timezone('utc'::TEXT, now());
+
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -138,6 +161,9 @@ CREATE POLICY "Lectura pública de horarios" ON class_schedules FOR SELECT USING
 -- Políticas de Perfiles
 DROP POLICY IF EXISTS "Usuarios pueden leer perfiles" ON profiles;
 CREATE POLICY "Usuarios pueden leer perfiles" ON profiles FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Usuarios pueden insertar su propio perfil" ON profiles;
+CREATE POLICY "Usuarios pueden insertar su propio perfil" ON profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
 
 DROP POLICY IF EXISTS "Usuarios pueden editar su propio perfil" ON profiles;
 CREATE POLICY "Usuarios pueden editar su propio perfil" ON profiles FOR UPDATE TO authenticated USING (auth.uid() = id);

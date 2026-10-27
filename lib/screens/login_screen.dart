@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/supabase_config.dart';
+import '../models/models.dart';
 import '../services/auth_service.dart';
+import '../services/user_session_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/neon_button.dart';
 import '../widgets/social_buttons.dart';
 import '../widgets/auth_segmented_switch.dart';
 import 'admin_dashboard_screen.dart';
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback onNavigateToRegister;
@@ -116,13 +119,32 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       _showFeedback('Welcome back, $userName!');
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => AdminDashboardScreen(
-            adminName: userName.isNotEmpty ? userName : 'Admin',
+      // Sincronizar rol del usuario en el estado global (UserSessionService)
+      // 1. Obtiene ID del usuario autenticado
+      // 2. Consulta la tabla 'profiles' para obtener 'role'
+      // 3. Almacena el rol en el estado global (ChangeNotifier) con manejo de errores
+      final role = await UserSessionService.instance.syncUserRole();
+
+      if (!mounted) return;
+
+      // 4. Si el usuario es role: admin navega a AdminDashboardScreen; si no, a HomeScreen
+      if (role == UserRole.admin) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => AdminDashboardScreen(
+              adminName: UserSessionService.instance.displayName,
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => HomeScreen(
+              athleteName: UserSessionService.instance.displayName,
+            ),
+          ),
+        );
+      }
     } on AuthException catch (e) {
       _showFeedback(e.message, isError: true);
     } catch (e) {
