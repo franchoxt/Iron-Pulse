@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../services/user_session_service.dart';
 import '../theme/app_theme.dart';
 import 'class_details_screen.dart';
+import 'create_edit_class_screen.dart';
 
 /// Pantalla de Lista de Clases (Schedule / Class Listing) para IRON PULSE.
 ///
@@ -38,6 +40,7 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
   // Filtros
   DateTime? _selectedDate; // null muestra todas las fechas (de la más cercana a la lejana)
   String _selectedCategoryId = 'all';
+  String _statusFilter = 'all'; // 'all', 'upcoming', 'past'
   String _searchQuery = '';
   bool _isSearchExpanded = false;
   final TextEditingController _searchController = TextEditingController();
@@ -61,7 +64,7 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
       final schedules = await DatabaseService.instance.getSchedules();
       final userBookings = await DatabaseService.instance.getUserBookings();
 
-      // Ordenar explícitamente de la fecha más cercana a la más lejana
+      // Ordenar cronológicamente (clases pasadas y futuras)
       schedules.sort((a, b) => a.startTime.compareTo(b.startTime));
 
       final bookedIds = userBookings
@@ -87,6 +90,10 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
 
   List<ClassScheduleModel> get _filteredSchedules {
     return _allSchedules.where((schedule) {
+      // 0. Filtro por estado temporal (Todas / Próximas / Finalizadas)
+      if (_statusFilter == 'upcoming' && schedule.isPast) return false;
+      if (_statusFilter == 'past' && !schedule.isPast) return false;
+
       // 1. Filtro por fecha seleccionada
       if (_selectedDate != null) {
         final st = schedule.startTime;
@@ -293,20 +300,51 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
     return '$h:$m';
   }
 
+  String _formatDateAndDay(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(dt.year, dt.month, dt.day);
+
+    if (target.isAtSameMomentAs(today)) return 'Hoy';
+    final yesterday = today.subtract(const Duration(days: 1));
+    if (target.isAtSameMomentAs(yesterday)) return 'Ayer';
+    final tomorrow = today.add(const Duration(days: 1));
+    if (target.isAtSameMomentAs(tomorrow)) return 'Mañana';
+
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return '${dt.day} ${months[dt.month - 1]}';
+  }
+
   String _formatDayLabel(DateTime? dt) {
-    if (dt == null) return 'All Available Classes';
+    if (dt == null) {
+      if (_statusFilter == 'past') return 'Sesiones Finalizadas';
+      if (_statusFilter == 'upcoming') return 'Próximas Sesiones';
+      return 'Todas las Sesiones';
+    }
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final target = DateTime(dt.year, dt.month, dt.day);
 
     if (target.isAtSameMomentAs(today)) {
-      return "Today's Sessions";
+      return "Sesiones de Hoy";
+    }
+    final yesterday = today.subtract(const Duration(days: 1));
+    if (target.isAtSameMomentAs(yesterday)) {
+      return "Sesiones de Ayer";
+    }
+    final tomorrow = today.add(const Duration(days: 1));
+    if (target.isAtSameMomentAs(tomorrow)) {
+      return "Sesiones de Mañana";
     }
 
     const weekdays = [
-      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+      'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'
     ];
-    return "${weekdays[dt.weekday - 1]}'s Sessions";
+    const months = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+    return "Sesiones del ${weekdays[dt.weekday - 1]} ${dt.day} ${months[dt.month - 1]}";
   }
 
   @override
@@ -324,7 +362,7 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
           child: CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // 1. Header Superior (GYM & CO. / IRON PULSE + Schedule + Búsqueda)
+              // 1. Header Superior (IRON PULSE / Schedule + Búsqueda + Nueva Clase)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -346,33 +384,44 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
                 child: _buildDaysHorizontalStrip(),
               ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              const SliverToBoxAdapter(child: SizedBox(height: 14)),
 
               // 3. Selector Horizontal de Categorías (All Classes, Strength, Cardio, Yoga...)
               SliverToBoxAdapter(
                 child: _buildCategoriesFilterStrip(),
               ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 22)),
+              const SliverToBoxAdapter(child: SizedBox(height: 14)),
 
-              // 4. Encabezado de Sección ("Today's Sessions" • "4 available")
+              // 4. Filtro Rápido de Estado: TODAS • PRÓXIMAS • FINALIZADAS (Rojo)
+              SliverToBoxAdapter(
+                child: _buildStatusFilterPills(),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 18)),
+
+              // 5. Encabezado de Sección ("Todas las Sesiones" • "X disponibles")
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        _formatDayLabel(_selectedDate),
-                        style: AppTypography.style(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
+                      Expanded(
+                        child: Text(
+                          _formatDayLabel(_selectedDate),
+                          style: AppTypography.style(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
-                        '${filtered.length} available',
+                        '${filtered.length} disponibles',
                         style: AppTypography.style(
                           color: const Color(0xFF64748B),
                           fontSize: 13,
@@ -386,7 +435,7 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
 
               const SliverToBoxAdapter(child: SizedBox(height: 14)),
 
-              // 5. Lista de Tarjetas de Clases
+              // 6. Lista de Tarjetas de Clases
               if (_isLoading)
                 const SliverFillRemaining(
                   child: Center(
@@ -547,36 +596,80 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
           ],
         ),
 
-        // Botón de búsqueda circular
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _isSearchExpanded = !_isSearchExpanded;
-              if (!_isSearchExpanded) {
-                _searchQuery = '';
-                _searchController.clear();
-              }
-            });
-          },
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFF161C26),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: _isSearchExpanded
-                    ? const Color(0xFF00A3E0)
-                    : const Color(0xFF263346),
-                width: 1.2,
+        // Botones de acción (Búsqueda + Nueva Clase para Admin)
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Botón de búsqueda circular
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isSearchExpanded = !_isSearchExpanded;
+                  if (!_isSearchExpanded) {
+                    _searchQuery = '';
+                    _searchController.clear();
+                  }
+                });
+              },
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161C26),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: _isSearchExpanded
+                        ? const Color(0xFF00A3E0)
+                        : const Color(0xFF263346),
+                    width: 1.2,
+                  ),
+                ),
+                child: Icon(
+                  _isSearchExpanded ? Icons.close_rounded : Icons.search_rounded,
+                  color: _isSearchExpanded ? const Color(0xFF00A3E0) : Colors.white,
+                  size: 22,
+                ),
               ),
             ),
-            child: Icon(
-              _isSearchExpanded ? Icons.close_rounded : Icons.search_rounded,
-              color: _isSearchExpanded ? const Color(0xFF00A3E0) : Colors.white,
-              size: 22,
-            ),
-          ),
+            if (UserSessionService.instance.isAdmin) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () async {
+                  final created = await Navigator.of(context).push<ClassScheduleModel?>(
+                    MaterialPageRoute(
+                      builder: (_) => const CreateEditClassScreen.create(),
+                    ),
+                  );
+                  if (created != null && mounted) {
+                    _loadData();
+                  }
+                },
+                child: Tooltip(
+                  message: 'Crear Nueva Clase',
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00A3E0),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF00A3E0).withValues(alpha: 0.35),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.add_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ],
     );
@@ -617,24 +710,25 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
   }
 
   // ===========================================================================
-  // WIDGET: SELECTOR HORIZONTAL DE DÍAS (Mon 12, Tue 13...)
+  // WIDGET: SELECTOR HORIZONTAL DE DÍAS (Pasados, Hoy y Futuros)
   // ===========================================================================
   Widget _buildDaysHorizontalStrip() {
     final now = DateTime.now();
-    // Generar los próximos 14 días a partir de hoy
-    final days = List.generate(14, (i) => now.add(Duration(days: i)));
+    // 7 días al pasado + hoy + 14 días al futuro
+    final startDate = now.subtract(const Duration(days: 7));
+    final days = List.generate(22, (i) => startDate.add(Duration(days: i)));
 
-    const weekdaysAbbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const weekdaysAbbr = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
     return SizedBox(
       height: 80,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: days.length + 1, // +1 para el chip "All"
+        itemCount: days.length + 2, // +1 para Chip "TODAS" + 1 para Botón Calendario
         separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
-          // Primer elemento: Chip "All"
+          // Primer elemento: Chip "TODAS"
           if (index == 0) {
             final isAllSelected = _selectedDate == null;
             return GestureDetector(
@@ -643,7 +737,7 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                width: 62,
+                width: 66,
                 decoration: BoxDecoration(
                   color: isAllSelected ? const Color(0xFF00A3E0) : const Color(0xFF131924),
                   borderRadius: BorderRadius.circular(20),
@@ -665,11 +759,11 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'ALL',
+                      'TODAS',
                       style: AppTypography.style(
                         color: isAllSelected ? Colors.white : const Color(0xFF94A3B8),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
                         letterSpacing: 0.8,
                       ),
                     ),
@@ -685,11 +779,61 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
             );
           }
 
+          // Último elemento: Botón para selector de fecha completa
+          if (index == days.length + 1) {
+            return GestureDetector(
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDate ?? DateTime.now(),
+                  firstDate: DateTime(2023),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                  builder: (context, child) => Theme(
+                    data: ThemeData.dark().copyWith(
+                      colorScheme: const ColorScheme.dark(
+                        primary: Color(0xFF00A3E0),
+                        surface: Color(0xFF131924),
+                      ),
+                    ),
+                    child: child!,
+                  ),
+                );
+                if (picked != null) {
+                  setState(() => _selectedDate = picked);
+                }
+              },
+              child: Container(
+                width: 58,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF131924),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF263346), width: 1.2),
+                ),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.date_range_rounded, color: Color(0xFF00A3E0), size: 20),
+                    SizedBox(height: 4),
+                    Text(
+                      'Otro día',
+                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
           final day = days[index - 1];
           final isSelected = _selectedDate != null &&
               day.year == _selectedDate!.year &&
               day.month == _selectedDate!.month &&
               day.day == _selectedDate!.day;
+
+          final todayDate = DateTime(now.year, now.month, now.day);
+          final thisDate = DateTime(day.year, day.month, day.day);
+          final isToday = thisDate.isAtSameMomentAs(todayDate);
+          final isPastDate = thisDate.isBefore(todayDate);
 
           final weekdayName = weekdaysAbbr[day.weekday - 1];
           final dayNum = day.day.toString();
@@ -708,11 +852,15 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
               duration: const Duration(milliseconds: 200),
               width: 62,
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF00A3E0) : const Color(0xFF131924),
+                color: isSelected
+                    ? const Color(0xFF00A3E0)
+                    : (isPastDate ? const Color(0xFF0F141D) : const Color(0xFF131924)),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isSelected ? const Color(0xFF00A3E0) : const Color(0xFF263346),
-                  width: 1.2,
+                  color: isSelected
+                      ? const Color(0xFF00A3E0)
+                      : (isToday ? const Color(0xFF00A3E0).withValues(alpha: 0.6) : const Color(0xFF263346)),
+                  width: isToday ? 1.5 : 1.2,
                 ),
                 boxShadow: isSelected
                     ? [
@@ -728,19 +876,23 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    weekdayName,
+                    isToday ? 'Hoy' : weekdayName,
                     style: AppTypography.style(
-                      color: isSelected ? Colors.white : const Color(0xFF94A3B8),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      color: isSelected
+                          ? Colors.white
+                          : (isToday ? const Color(0xFF00A3E0) : const Color(0xFF94A3B8)),
+                      fontSize: 11.5,
+                      fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     dayNum,
                     style: AppTypography.style(
-                      color: isSelected ? Colors.white : const Color(0xFFE2E8F0),
-                      fontSize: 19,
+                      color: isSelected
+                          ? Colors.white
+                          : (isPastDate ? const Color(0xFF94A3B8) : const Color(0xFFE2E8F0)),
+                      fontSize: 18,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -749,6 +901,117 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // WIDGET: FILTROS DE ESTADO (TODAS • PRÓXIMAS • FINALIZADAS EN ROJO)
+  // ===========================================================================
+  Widget _buildStatusFilterPills() {
+    final int totalCount = _allSchedules.length;
+    final int pastCount = _allSchedules.where((s) => s.isPast).length;
+    final int upcomingCount = _allSchedules.where((s) => !s.isPast).length;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildStatusChip(
+              label: 'TODAS',
+              count: totalCount,
+              filterKey: 'all',
+              activeColor: const Color(0xFF00BCEB),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildStatusChip(
+              label: 'PRÓXIMAS',
+              count: upcomingCount,
+              filterKey: 'upcoming',
+              activeColor: const Color(0xFF22C55E),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildStatusChip(
+              label: 'FINALIZADAS',
+              count: pastCount,
+              filterKey: 'past',
+              activeColor: const Color(0xFFEF4444),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip({
+    required String label,
+    required int count,
+    required String filterKey,
+    required Color activeColor,
+  }) {
+    final isSelected = _statusFilter == filterKey;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() => _statusFilter = filterKey);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? activeColor : const Color(0xFF161E28),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? activeColor : const Color(0xFF222C3D),
+            width: isSelected ? 1.5 : 1.0,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: activeColor.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.black.withValues(alpha: 0.3)
+                    : const Color(0xFF222C3D),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  color: isSelected ? Colors.white : const Color(0xFFCBD5E1),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -822,6 +1085,8 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
   Widget _buildClassCard(ClassScheduleModel schedule, bool isBooked) {
     final gymClass = schedule.gymClass;
     final instructor = schedule.instructor;
+    final isPast = schedule.isPast;
+    final isAdmin = UserSessionService.instance.isAdmin;
 
     final availableSpots = isBooked
         ? (schedule.availableSpots > 0 ? schedule.availableSpots - 1 : 0)
@@ -830,6 +1095,7 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
 
     final timeStr = _formatTime(schedule.startTime);
     final durationStr = '${gymClass?.durationMinutes ?? 45}m';
+    final datePrefix = _formatDateAndDay(schedule.startTime);
 
     final tagText = gymClass?.intensity.displayName.toUpperCase() ?? 'HIIT';
 
@@ -838,18 +1104,26 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
         : 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600';
 
     return GestureDetector(
-      onTap: () => _openClassDetails(schedule, isBooked),
+      onTap: () {
+        if (isAdmin) {
+          _showEditScheduleModal(schedule);
+        } else {
+          _openClassDetails(schedule, isBooked);
+        }
+      },
       child: Container(
-        height: 148,
+        height: 154,
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
           color: const Color(0xFF131924),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: isBooked
-                ? const Color(0xFF00A3E0).withValues(alpha: 0.6)
-                : const Color(0xFF1E293B),
-            width: isBooked ? 1.5 : 1.2,
+            color: isPast
+                ? const Color(0xFFEF4444).withValues(alpha: 0.35)
+                : (isBooked
+                    ? const Color(0xFF00A3E0).withValues(alpha: 0.6)
+                    : const Color(0xFF1E293B)),
+            width: (isPast || isBooked) ? 1.5 : 1.2,
           ),
           boxShadow: [
             BoxShadow(
@@ -872,11 +1146,11 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Tag de clase + Horario
+                      // Tag de clase + ETIQUETA ROJA SI YA PASÓ + Horario
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                             decoration: BoxDecoration(
                               color: const Color(0xFF1E293B),
                               borderRadius: BorderRadius.circular(8),
@@ -891,13 +1165,51 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '$timeStr • $durationStr',
-                            style: AppTypography.style(
-                              color: const Color(0xFF00A3E0),
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
+                          // ETIQUETA ROJA PARA CLASES PASADAS
+                          if (isPast) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEF4444).withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFEF4444), width: 1.2),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 5,
+                                    height: 5,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFEF4444),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'FINALIZADA',
+                                    style: AppTypography.style(
+                                      color: const Color(0xFFEF4444),
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '$datePrefix • $timeStr • $durationStr',
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.style(
+                                color: isPast ? const Color(0xFF94A3B8) : const Color(0xFF00A3E0),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ],
@@ -905,12 +1217,12 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
 
                       // Título de la clase
                       Text(
-                        gymClass?.name ?? 'Inferno Intervals',
+                        gymClass?.name ?? 'Clase de Entrenamiento',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.style(
                           color: Colors.white,
-                          fontSize: 17,
+                          fontSize: 16.5,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.2,
                         ),
@@ -927,7 +1239,7 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              'with ${instructor?.name ?? 'Sarah J.'}',
+                              'con ${instructor?.name ?? 'Instructor'}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: AppTypography.style(
@@ -940,150 +1252,222 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
                         ],
                       ),
 
-                      // Fila inferior: Availability + Botón Acción
+                      // Fila inferior: Disponibilidad/Estado + Botón Acción
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          // Indicador de disponibilidad
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                isFull ? 'STATUS' : 'AVAILABILITY',
-                                style: AppTypography.style(
-                                  color: const Color(0xFF64748B),
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.6,
+                          // Indicador de disponibilidad o estado finalizado
+                          if (isPast)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'ESTADO',
+                                  style: AppTypography.style(
+                                    color: const Color(0xFFEF4444),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.6,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 2),
-                              if (isBooked)
+                                const SizedBox(height: 2),
                                 Row(
                                   children: [
                                     const Icon(
-                                      Icons.check_circle_rounded,
-                                      color: Color(0xFF22C55E),
+                                      Icons.history_rounded,
+                                      color: Color(0xFFEF4444),
                                       size: 13,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'Reservado',
+                                      'Finalizada',
                                       style: AppTypography.style(
-                                        color: const Color(0xFF22C55E),
+                                        color: const Color(0xFFEF4444),
                                         fontSize: 12,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
                                   ],
-                                )
-                              else if (isFull)
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.block_rounded,
-                                      color: Color(0xFF94A3B8),
-                                      size: 13,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Full',
-                                      style: AppTypography.style(
-                                        color: const Color(0xFF94A3B8),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
+                                ),
+                              ],
+                            )
+                          else
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  isFull ? 'STATUS' : 'AVAILABILITY',
+                                  style: AppTypography.style(
+                                    color: const Color(0xFF64748B),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.6,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                if (isBooked)
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.check_circle_rounded,
+                                        color: Color(0xFF22C55E),
+                                        size: 13,
                                       ),
-                                    ),
-                                  ],
-                                )
-                              else if (availableSpots <= 3)
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.access_time_rounded,
-                                      color: Color(0xFFF59E0B),
-                                      size: 13,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '$availableSpots spots left',
-                                      style: AppTypography.style(
-                                        color: const Color(0xFFF59E0B),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              else
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: const Color(0xFF00A3E0),
-                                          width: 2,
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Reservado',
+                                        style: AppTypography.style(
+                                          color: const Color(0xFF22C55E),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 5),
-                                    Text(
-                                      '$availableSpots / ${schedule.capacity}',
-                                      style: AppTypography.style(
-                                        color: const Color(0xFF00A3E0),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
+                                    ],
+                                  )
+                                else if (isFull)
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.block_rounded,
+                                        color: Color(0xFF94A3B8),
+                                        size: 13,
                                       ),
-                                    ),
-                                  ],
-                                ),
-                            ],
-                          ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Full',
+                                        style: AppTypography.style(
+                                          color: const Color(0xFF94A3B8),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else if (availableSpots <= 3)
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.access_time_rounded,
+                                        color: Color(0xFFF59E0B),
+                                        size: 13,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '$availableSpots spots left',
+                                        style: AppTypography.style(
+                                          color: const Color(0xFFF59E0B),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: const Color(0xFF00A3E0),
+                                            width: 2,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        '$availableSpots / ${schedule.capacity}',
+                                        style: AppTypography.style(
+                                          color: const Color(0xFF00A3E0),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
 
-                          // Botón CTA (Book / Join Waitlist / Cancelar)
-                          SizedBox(
-                            height: 36,
-                            child: ElevatedButton(
-                              onPressed: () {
-                                if (isBooked) {
-                                  _promptCancelReservation(schedule);
-                                } else {
-                                  _openClassDetails(schedule, isBooked);
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: isBooked
-                                    ? const Color(0xFFDC2626)
-                                    : (isFull
-                                        ? const Color(0xFF1E293B)
-                                        : const Color(0xFF00A3E0)),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  side: isFull && !isBooked
-                                      ? const BorderSide(color: Color(0xFF334155))
-                                      : BorderSide.none,
+                          // Botón Acción: EDITAR para Administrador / BOOK para Cliente
+                          if (isAdmin)
+                            SizedBox(
+                              height: 36,
+                              child: ElevatedButton.icon(
+                                onPressed: () => _showEditScheduleModal(schedule),
+                                icon: const Icon(
+                                  Icons.edit_calendar_rounded,
+                                  size: 15,
+                                  color: Colors.white,
+                                ),
+                                label: Text(
+                                  'Editar',
+                                  style: AppTypography.style(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF00A3E0),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
                                 ),
                               ),
-                              child: Text(
-                                isBooked
-                                    ? 'Cancelar'
-                                    : (isFull ? 'Join Waitlist' : 'Book'),
-                                style: AppTypography.style(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
+                            )
+                          else
+                            SizedBox(
+                              height: 36,
+                              child: ElevatedButton(
+                                onPressed: isPast
+                                    ? null
+                                    : () {
+                                        if (isBooked) {
+                                          _promptCancelReservation(schedule);
+                                        } else {
+                                          _openClassDetails(schedule, isBooked);
+                                        }
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isPast
+                                      ? const Color(0xFF1E293B)
+                                      : (isBooked
+                                          ? const Color(0xFFDC2626)
+                                          : (isFull
+                                              ? const Color(0xFF1E293B)
+                                              : const Color(0xFF00A3E0))),
+                                  foregroundColor: isPast ? const Color(0xFF64748B) : Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    side: isFull && !isBooked && !isPast
+                                        ? const BorderSide(color: Color(0xFF334155))
+                                        : BorderSide.none,
+                                  ),
+                                ),
+                                child: Text(
+                                  isPast
+                                      ? 'Finalizada'
+                                      : (isBooked
+                                          ? 'Cancelar'
+                                          : (isFull ? 'Join Waitlist' : 'Book')),
+                                  style: AppTypography.style(
+                                    color: isPast ? const Color(0xFF64748B) : Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ],
@@ -1091,7 +1475,7 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
                 ),
               ),
 
-              // 2. Columna derecha: Fotografía de la clase
+              // 2. Columna derecha: Fotografía de la clase + Badge Roja si es pasada
               Expanded(
                 flex: 4,
                 child: Stack(
@@ -1126,6 +1510,34 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
                         ),
                       ),
                     ),
+                    // Etiqueta roja en esquina de la imagen si ya pasó
+                    if (isPast)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDC2626),
+                            borderRadius: BorderRadius.circular(6),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: const Text(
+                            'PASADA',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -1134,5 +1546,27 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
         ),
       ),
     );
+  }
+
+  // ===========================================================================
+  // MODAL: EDITAR CLASE (DISEÑO IDÉNTICO A CREAR CLASE)
+  // ===========================================================================
+  void _showEditScheduleModal(ClassScheduleModel schedule) async {
+    final result = await showModalBottomSheet<ClassScheduleModel?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: FractionallySizedBox(
+          heightFactor: 0.94,
+          child: CreateEditClassScreen.edit(schedule: schedule),
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      _loadData();
+    }
   }
 }

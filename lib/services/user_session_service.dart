@@ -21,6 +21,18 @@ class UserSessionService extends ChangeNotifier {
   /// Perfil actual del usuario autenticado
   UserProfileModel? get profile => _profile;
 
+  /// URL del avatar actual del perfil (de la base de datos o metadatos de usuario)
+  String? get avatarUrl {
+    if (_profile?.avatarUrl != null && _profile!.avatarUrl!.trim().isNotEmpty) {
+      return _profile!.avatarUrl!.trim();
+    }
+    final metaAvatar = currentUser?.userMetadata?['avatar_url'] as String?;
+    if (metaAvatar != null && metaAvatar.trim().isNotEmpty) {
+      return metaAvatar.trim();
+    }
+    return null;
+  }
+
   /// Rol actual del usuario (por defecto 'client')
   UserRole get role => _profile?.role ?? _cachedRole;
 
@@ -30,10 +42,24 @@ class UserSessionService extends ChangeNotifier {
   /// Indica si el usuario actual es cliente
   bool get isClient => role == UserRole.client;
 
+  /// Indica si el usuario actual es instructor o entrenador
+  bool get isInstructor => role == UserRole.instructor;
+
   /// Actualiza temporalmente el avatar de forma reactiva local
   void updateAvatarLocally(String newAvatarUrl) {
     if (_profile != null) {
       _profile = _profile!.copyWith(avatarUrl: newAvatarUrl);
+      notifyListeners();
+    }
+  }
+
+  /// Actualiza datos del perfil localmente de forma reactiva
+  void updateProfileLocally({String? fullName, String? avatarUrl}) {
+    if (_profile != null) {
+      _profile = _profile!.copyWith(
+        fullName: fullName ?? _profile!.fullName,
+        avatarUrl: avatarUrl ?? _profile!.avatarUrl,
+      );
       notifyListeners();
     }
   }

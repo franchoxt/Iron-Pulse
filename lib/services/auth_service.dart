@@ -1,7 +1,9 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/supabase_config.dart';
+import 'database_service.dart';
+import 'user_session_service.dart';
 
 /// Servicio de autenticación con Supabase para Iron Pulse.
 class AuthService {
@@ -109,10 +111,157 @@ class AuthService {
   /// Cerrar sesión actual
   Future<void> signOut() async {
     try {
-      await client.auth.signOut();
+      if (isInitialized) {
+        await client.auth.signOut();
+      }
     } catch (e) {
       debugPrint('Error en signOut: $e');
     }
+  }
+
+  /// Cierra la sesión en Supabase, limpia almacenamiento local/memoria y redirige al Login
+  Future<void> logout(BuildContext context) async {
+    try {
+      // 1. Cerrar sesión en el backend Supabase (limpia tokens de almacenamiento local)
+      await signOut();
+    } catch (e) {
+      debugPrint('Aviso durante signOut en Supabase: $e');
+    }
+
+    // 2. Limpiar almacenamiento local en memoria de la sesión
+    UserSessionService.instance.clear();
+    DatabaseService.instance.clearSessionData();
+
+    // 3. Redireccionar a la pantalla de Login limpiando todo el historial de navegación
+    if (context.mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/auth',
+        (route) => false,
+      );
+    }
+  }
+
+  /// Diálogo de confirmación para cerrar sesión (Cliente y Admin)
+  Future<bool> showLogoutDialog(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.75),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 26),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF141C26),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFF263346), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.6),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                  border: Border.all(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.4),
+                    width: 1.5,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: Color(0xFFEF4444),
+                  size: 26,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Cerrar Sesión',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                '¿Estás seguro de que deseas salir de tu cuenta en IRON PULSE?',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: const BorderSide(color: Color(0xFF334155)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        'Cancelar',
+                        style: TextStyle(
+                          color: Color(0xFFCBD5E1),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFDC2626),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        'Sí, Salir',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      await logout(context);
+      return true;
+    }
+    return false;
   }
 
   /// Traduce los mensajes comunes de Supabase Auth a español amigable

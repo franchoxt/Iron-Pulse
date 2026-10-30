@@ -1,16 +1,36 @@
 // Enums definidos en .agents/rules/tablas-supabase.md
 
-/// Rol del usuario (admin vs cliente)
+/// Rol del usuario (admin vs cliente vs instructor)
 enum UserRole {
   client,
-  admin;
+  admin,
+  instructor;
 
   static UserRole fromString(String? value) {
-    if (value == 'admin') return UserRole.admin;
-    return UserRole.client;
+    switch (value?.toLowerCase()) {
+      case 'admin':
+        return UserRole.admin;
+      case 'instructor':
+      case 'trainer':
+      case 'entrenador':
+        return UserRole.instructor;
+      default:
+        return UserRole.client;
+    }
   }
 
   String toDbString() => name;
+
+  String get displayName {
+    switch (this) {
+      case UserRole.admin:
+        return 'Administrador';
+      case UserRole.instructor:
+        return 'Instructor';
+      case UserRole.client:
+        return 'Cliente';
+    }
+  }
 }
 
 /// Estado de reserva

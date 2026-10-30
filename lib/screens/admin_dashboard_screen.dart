@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../theme/app_theme.dart';
 import 'schedule_view.dart';
@@ -54,7 +55,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         currentBody = const ScheduleView();
         break;
       case 2:
-        currentBody = const AdminPortalView();
+        currentBody = AdminPortalView(
+          onBack: () => setState(() => _currentNavIndex = 0),
+        );
         break;
       case 3:
         currentBody = const ProfileView();
@@ -628,34 +631,64 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ],
         ),
 
-        // Botón Notificaciones con punto azul
-        Stack(
-          clipBehavior: Clip.none,
+        // Botones de acción: Notificaciones y Cerrar Sesión
+        Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: const Color(0xFF161A23),
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF242C3D)),
-              ),
-              child: const Icon(
-                Icons.notifications_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
+            // Botón Notificaciones con punto azul
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161A23),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF242C3D)),
+                  ),
+                  child: const Icon(
+                    Icons.notifications_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                Positioned(
+                  top: 10,
+                  right: 12,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF13A4EC),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFF0A0D14), width: 1.5),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            Positioned(
-              top: 10,
-              right: 12,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF13A4EC),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF0A0D14), width: 1.5),
+            const SizedBox(width: 8),
+
+            // Botón Cerrar Sesión (Admin)
+            GestureDetector(
+              onTap: () => AuthService.instance.showLogoutDialog(context),
+              behavior: HitTestBehavior.opaque,
+              child: Tooltip(
+                message: 'Cerrar Sesión',
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161A23),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF242C3D)),
+                  ),
+                  child: const Icon(
+                    Icons.logout_rounded,
+                    color: Color(0xFFEF4444),
+                    size: 20,
+                  ),
                 ),
               ),
             ),

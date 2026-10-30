@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../services/auth_service.dart';
 import '../services/database_service.dart';
+import '../services/user_session_service.dart';
 import 'schedule_view.dart';
 import 'profile_view.dart';
 import 'class_details_screen.dart';
@@ -103,6 +105,52 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _initData();
+    UserSessionService.instance.addListener(_onSessionChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncUserData();
+    });
+  }
+
+  void _onSessionChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _syncUserData() async {
+    await UserSessionService.instance.syncUserRole();
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    UserSessionService.instance.removeListener(_onSessionChanged);
+    super.dispose();
+  }
+
+  String get _greetingName {
+    final session = UserSessionService.instance;
+    final fullName = session.profile?.fullName?.trim();
+    if (fullName != null && fullName.isNotEmpty) {
+      return fullName;
+    }
+    final sessionName = session.displayName.trim();
+    if (sessionName.isNotEmpty &&
+        sessionName != 'Atleta' &&
+        sessionName != 'Admin') {
+      return sessionName;
+    }
+    if (widget.athleteName.trim().isNotEmpty &&
+        widget.athleteName != 'Javier') {
+      return widget.athleteName.trim();
+    }
+    return sessionName.isNotEmpty ? sessionName : 'Atleta';
+  }
+
+  String? get _userAvatarUrl {
+    final avatar = UserSessionService.instance.avatarUrl;
+    if (avatar != null && avatar.trim().isNotEmpty) {
+      return avatar.trim();
+    }
+    return null;
   }
 
   void _initData() {
@@ -489,138 +537,195 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Left: Avatar + Title & Subtitle
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Avatar with secondary status indicator (Tapping navigates to Profile)
-              GestureDetector(
-                onTap: () => setState(() => _currentNavIndex = 3),
-                behavior: HitTestBehavior.opaque,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.surfaceContainerHigh,
-                        border: Border.all(
-                          color: AppColors.outlineVariant.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: const Center(
-                        child: Icon(
-                          Icons.person_rounded,
-                          color: AppColors.primaryLight,
-                          size: 22,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        width: 10,
-                        height: 10,
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Avatar with secondary status indicator (Tapping navigates to Profile)
+                GestureDetector(
+                  onTap: () => setState(() => _currentNavIndex = 3),
+                  behavior: HitTestBehavior.opaque,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
-                          color: AppColors.secondary,
                           shape: BoxShape.circle,
+                          color: AppColors.surfaceContainerHigh,
                           border: Border.all(
-                            color: const Color(0xFF111319),
-                            width: 2,
+                            color: const Color(0xFF00A3E0),
+                            width: 1.5,
                           ),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Greeting Column
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Hola, ${widget.athleteName}',
-                        style: AppTypography.style(
-                          color: AppColors.onSurface,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.5,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(22),
+                          child: _userAvatarUrl != null
+                              ? Image.network(
+                                  _userAvatarUrl!,
+                                  width: 44,
+                                  height: 44,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Center(
+                                    child: Icon(
+                                      Icons.person_rounded,
+                                      color: AppColors.primaryLight,
+                                      size: 22,
+                                    ),
+                                  ),
+                                )
+                              : const Center(
+                                  child: Icon(
+                                    Icons.person_rounded,
+                                    color: AppColors.primaryLight,
+                                    size: 22,
+                                  ),
+                                ),
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        '👋',
-                        style: TextStyle(fontSize: 20),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          width: 11,
+                          height: 11,
+                          decoration: BoxDecoration(
+                            color: AppColors.secondary,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF111319),
+                              width: 2,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Ready to crush your goals today?',
-                    style: AppTypography.style(
-                      color: AppColors.onSurfaceVariant,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-
-          // Right: Notifications Button
-          GestureDetector(
-            onTap: _showNotificationsSheet,
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainer,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.outlineVariant.withValues(alpha: 0.2),
-                  width: 1,
                 ),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  const Icon(
-                    Icons.notifications_none_rounded,
-                    color: AppColors.onSurface,
-                    size: 22,
-                  ),
-                  // Electric cyan indicator dot with glow
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryContainer,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF00A3E0).withValues(alpha: 0.8),
-                            blurRadius: 6,
-                            spreadRadius: 1,
+                const SizedBox(width: 12),
+
+                // Greeting Column
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'Hola, $_greetingName',
+                              style: AppTypography.style(
+                                color: AppColors.onSurface,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.5,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            '👋',
+                            style: TextStyle(fontSize: 20),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Ready to crush your goals today?',
+                        style: AppTypography.style(
+                          color: AppColors.onSurfaceVariant,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Right: Notifications Button & Logout Button
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onTap: _showNotificationsSheet,
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainer,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppColors.outlineVariant.withValues(alpha: 0.2),
+                      width: 1,
                     ),
                   ),
-                ],
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      const Icon(
+                        Icons.notifications_none_rounded,
+                        color: AppColors.onSurface,
+                        size: 22,
+                      ),
+                      // Electric cyan indicator dot with glow
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryContainer,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF00A3E0).withValues(alpha: 0.8),
+                                blurRadius: 6,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+
+              // Botón Cerrar Sesión (Cliente)
+              GestureDetector(
+                onTap: () => AuthService.instance.showLogoutDialog(context),
+                behavior: HitTestBehavior.opaque,
+                child: Tooltip(
+                  message: 'Cerrar Sesión',
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainer,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.outlineVariant.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.logout_rounded,
+                      color: Color(0xFFEF4444),
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

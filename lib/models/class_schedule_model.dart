@@ -46,6 +46,60 @@ class ClassScheduleModel {
     return now.isAfter(startTime) && now.isBefore(endTime);
   }
 
+  /// Indica si la sesión ya finalizó (su horario ha pasado)
+  bool get isPast {
+    return DateTime.now().isAfter(endTime);
+  }
+
+  /// Indica si la clase ya comenzó
+  bool get hasStarted {
+    return DateTime.now().isAfter(startTime);
+  }
+
+  /// Nombre de la clase asociada
+  String get className => gymClass?.name ?? 'Clase';
+
+  /// Nombre del instructor asignado
+  String get instructorName => instructor?.name ?? 'Instructor';
+
+  /// Rango de horario formateado (HH:MM - HH:MM)
+  String get timeRangeStr {
+    final startHour = startTime.hour.toString().padLeft(2, '0');
+    final startMin = startTime.minute.toString().padLeft(2, '0');
+    final endHour = endTime.hour.toString().padLeft(2, '0');
+    final endMin = endTime.minute.toString().padLeft(2, '0');
+    return '$startHour:$startMin - $endHour:$endMin';
+  }
+
+  ClassScheduleModel copyWith({
+    String? id,
+    String? classId,
+    String? instructorId,
+    DateTime? startTime,
+    DateTime? endTime,
+    int? capacity,
+    String? locationName,
+    bool? isLive,
+    GymClassModel? gymClass,
+    InstructorModel? instructor,
+    int? confirmedBookingsCount,
+  }) {
+    return ClassScheduleModel(
+      id: id ?? this.id,
+      classId: classId ?? this.classId,
+      instructorId: instructorId ?? this.instructorId,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      capacity: capacity ?? this.capacity,
+      locationName: locationName ?? this.locationName,
+      isLive: isLive ?? this.isLive,
+      gymClass: gymClass ?? this.gymClass,
+      instructor: instructor ?? this.instructor,
+      confirmedBookingsCount:
+          confirmedBookingsCount ?? this.confirmedBookingsCount,
+    );
+  }
+
   factory ClassScheduleModel.fromJson(Map<String, dynamic> json) {
     // Cálculo de bookings confirmados si vienen agregados
     int bookingsCount = 0;

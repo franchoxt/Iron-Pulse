@@ -109,6 +109,11 @@ class DatabaseService {
   // ===========================================================================
   final List<BookingModel> _sessionBookings = [];
 
+  /// Limpia la caché y reservas temporales de la sesión al cerrar sesión
+  void clearSessionData() {
+    _sessionBookings.clear();
+  }
+
   Future<BookingModel> bookClass({required String scheduleId}) async {
     final client = _client;
     final user = AuthService.instance.currentUser;
@@ -621,11 +626,126 @@ class DatabaseService {
   }) async {
     final client = _client;
     if (client != null) {
-      await client
-          .from('bookings')
-          .update({'is_present': isPresent})
-          .eq('id', bookingId);
+      try {
+        await client
+            .from('bookings')
+            .update({'is_present': isPresent})
+            .eq('id', bookingId);
+      } catch (e) {
+        debugPrint('Aviso actualizando is_present en Supabase: $e');
+      }
     }
+  }
+
+  /// Actualiza el estado de una reserva (confirmed, waitlist, cancelled)
+  Future<void> updateBookingStatus({
+    required String bookingId,
+    required String status,
+  }) async {
+    final client = _client;
+    if (client != null) {
+      try {
+        await client
+            .from('bookings')
+            .update({'status': status})
+            .eq('id', bookingId);
+      } catch (e) {
+        debugPrint('Aviso actualizando status de reserva: $e');
+      }
+    }
+  }
+
+  /// Obtiene los estudiantes/reservas para una sesión específica con datos de perfiles
+  Future<List<Map<String, dynamic>>> getRosterForSchedule(String scheduleId) async {
+    final client = _client;
+    if (client != null) {
+      try {
+        final data = await client
+            .from('bookings')
+            .select('''
+              id,
+              user_id,
+              schedule_id,
+              status,
+              is_present,
+              created_at,
+              profiles (
+                id,
+                full_name,
+                avatar_url,
+                role
+              )
+            ''')
+            .eq('schedule_id', scheduleId)
+            .order('created_at', ascending: true);
+
+        if (data.isNotEmpty) {
+          final List<Map<String, dynamic>> roster = [];
+          int waitlistCounter = 1;
+          for (final item in data) {
+            final profile = item['profiles'] as Map<String, dynamic>?;
+            final statusStr = item['status'] as String? ?? 'confirmed';
+            final isWaitlist = statusStr.toLowerCase() == 'waitlist';
+            final waitlistNumber = isWaitlist ? waitlistCounter++ : null;
+
+            final fullName = profile?['full_name'] as String? ?? 'Atleta';
+            roster.add({
+              'id': item['id'] as String,
+              'userId': item['user_id'] as String,
+              'name': fullName,
+              'email': '${fullName.toLowerCase().replaceAll(' ', '.')}@ironpulse.fit',
+              'avatar': profile?['avatar_url'] as String? ?? '',
+              'status': statusStr,
+              'waitlistNumber': waitlistNumber,
+              'isPresent': item['is_present'] as bool? ?? false,
+            });
+          }
+          return roster;
+        }
+      } catch (e) {
+        debugPrint('Aviso obteniendo roster de sesión desde Supabase: $e');
+      }
+    }
+    return [];
+  }
+
+  /// Agrega un nuevo estudiante a la sesión en Supabase
+  Future<Map<String, dynamic>?> addStudentToSchedule({
+    required String scheduleId,
+    required String fullName,
+    required String email,
+    required String status,
+    bool isPresent = false,
+  }) async {
+    final client = _client;
+    if (client != null) {
+      try {
+        // Crear un id único
+        final bookingId = '00000000-0000-0000-0000-${DateTime.now().millisecondsSinceEpoch.toString().padLeft(12, '0').substring(0, 12)}';
+        final userId = '00000000-0000-0000-0000-${(DateTime.now().millisecondsSinceEpoch + 1).toString().padLeft(12, '0').substring(0, 12)}';
+
+        await client.from('bookings').insert({
+          'id': bookingId,
+          'user_id': userId,
+          'schedule_id': scheduleId,
+          'status': status,
+          'is_present': isPresent,
+        });
+
+        return {
+          'id': bookingId,
+          'userId': userId,
+          'name': fullName,
+          'email': email,
+          'status': status,
+          'isPresent': isPresent,
+          'avatar': '',
+        };
+      } catch (e) {
+        debugPrint('Aviso insertando reserva en Supabase: $e');
+      }
+    }
+    return null;
   }
 
   // ===========================================================================
@@ -717,6 +837,136 @@ class DatabaseService {
     return false;
   }
 
+  /// Actualiza el rol de un usuario en Supabase (tabla 'profiles', 'instructors' y auth metadata)
+  /// Permite asignar: 'admin', 'client' o 'instructor'
+  Future<bool> updateUserRole({
+    required String userId,
+    required String newRole,
+    String? userName,
+    String? userAvatar,
+  }) async {
+    final client = _client;
+    if (client == null) return false;
+
+    final currentAuthUser = AuthService.instance.currentUser;
+    final uuidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+
+    String targetId = userId;
+
+    // 1. Resolver targetId si no es un UUID válido (ej. viene de mocks o placeholders)
+    if (!uuidRegex.hasMatch(targetId)) {
+      if (currentAuthUser != null && (userName == 'Admin' || userName == currentAuthUser.userMetadata?['full_name'])) {
+        targetId = currentAuthUser.id;
+      } else if (userName != null && userName.isNotEmpty) {
+        try {
+          final match = await client
+              .from('profiles')
+              .select('id')
+              .ilike('full_name', '%$userName%')
+              .limit(1);
+          final list = match as List;
+          if (list.isNotEmpty && list.first['id'] != null) {
+            targetId = list.first['id'] as String;
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (!uuidRegex.hasMatch(targetId) && currentAuthUser != null) {
+      targetId = currentAuthUser.id;
+    }
+
+    bool updated = false;
+
+    // 2. Gestión de la tabla 'instructors':
+    if (userName != null && userName.isNotEmpty) {
+      try {
+        if (newRole == 'instructor') {
+          // Si el rol es instructor, verificar si ya está en tabla instructors
+          final existing = await client
+              .from('instructors')
+              .select('id')
+              .ilike('name', userName)
+              .limit(1);
+          final list = existing as List;
+          if (list.isEmpty) {
+            await client.from('instructors').insert({
+              'name': userName,
+              'avatar_url': userAvatar ?? '',
+              'bio': 'Instructor Iron Pulse',
+              'rating': 5.0,
+            });
+            debugPrint('Instructor $userName insertado en tabla instructors ✓');
+          }
+          updated = true;
+        } else {
+          // Si el rol ya no es instructor, remover de tabla instructors para mantener consistencia
+          await client.from('instructors').delete().ilike('name', userName);
+          debugPrint('Instructor $userName removido de tabla instructors ✓');
+        }
+      } catch (e) {
+        debugPrint('Aviso gestionando tabla instructors: $e');
+      }
+    }
+
+    // 3. Gestión de la tabla 'profiles':
+    if (uuidRegex.hasMatch(targetId)) {
+      try {
+        // Intentar actualizar directamente
+        final updateRes = await client.from('profiles').update({
+          'role': newRole,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        }).eq('id', targetId).select();
+
+        final updatedList = updateRes as List;
+        if (updatedList.isNotEmpty) {
+          updated = true;
+          debugPrint('Rol actualizado en profiles: ${updatedList.first}');
+        } else if (currentAuthUser != null && currentAuthUser.id == targetId) {
+          // Si no existía el registro para el usuario autenticado, crearlo mediante upsert
+          final upsertRes = await client.from('profiles').upsert({
+            'id': targetId,
+            if (userName != null && userName.isNotEmpty) 'full_name': userName,
+            if (userAvatar != null && userAvatar.isNotEmpty) 'avatar_url': userAvatar,
+            'role': newRole,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          }).select();
+          debugPrint('Perfil creado/actualizado con upsert: $upsertRes');
+          updated = true;
+        }
+      } catch (e) {
+        debugPrint('Aviso al actualizar profiles con $newRole: $e');
+        // Si PostgreSQL restringe el enum user_role a ('admin', 'client') y newRole es 'instructor'
+        if (newRole == 'instructor') {
+          try {
+            await client.from('profiles').update({
+              'role': 'client',
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            }).eq('id', targetId);
+            updated = true;
+          } catch (e2) {
+            debugPrint('Error en fallback profiles: $e2');
+          }
+        }
+      }
+
+      // 4. Si el usuario modificado es el usuario actual, actualizar metadata de Supabase Auth
+      if (currentAuthUser != null && currentAuthUser.id == targetId) {
+        try {
+          await client.auth.updateUser(
+            UserAttributes(data: {'role': newRole}),
+          );
+          debugPrint('Auth metadata actualizada a role=$newRole ✓');
+          updated = true;
+        } catch (e) {
+          debugPrint('Aviso actualizando auth metadata: $e');
+        }
+      }
+    }
+
+    return updated;
+  }
+
   // ===========================================================================
   // 5. ESTADÍSTICAS DEL PORTAL ADMIN (Occupancy Rate & Happening Now)
   // ===========================================================================
@@ -747,8 +997,99 @@ class DatabaseService {
   }
 
   // ===========================================================================
-  // 6. INSTRUCTORES
+  // 6. INSTRUCTORES & CONTEOS PARA EL PORTAL ADMIN
   // ===========================================================================
+  /// Conteo de usuarios registrados en la tabla 'profiles'
+  Future<int> getRegisteredUsersCount() async {
+    final client = _client;
+    if (client != null) {
+      try {
+        final data = await client.from('profiles').select('id');
+        final list = data as List;
+        if (list.isNotEmpty) return list.length;
+      } catch (e) {
+        debugPrint('Error obteniendo conteo de usuarios en Supabase: $e');
+      }
+    }
+    return 24; // Fallback demo
+  }
+
+  /// Conteo de administradores registrados en la tabla 'profiles' (role = 'admin')
+  Future<int> getAdminsCount() async {
+    final client = _client;
+    if (client != null) {
+      try {
+        final data = await client
+            .from('profiles')
+            .select('id')
+            .eq('role', 'admin');
+        final list = data as List;
+        return list.length;
+      } catch (e) {
+        debugPrint('Error obteniendo conteo de administradores en Supabase: $e');
+      }
+    }
+    return 1; // Fallback demo
+  }
+
+  /// Conteo de instructores registrados en la tabla 'instructors'
+  Future<int> getInstructorsCount() async {
+    final client = _client;
+    if (client != null) {
+      try {
+        final data = await client.from('instructors').select('id');
+        final list = data as List;
+        if (list.isNotEmpty) return list.length;
+      } catch (e) {
+        debugPrint('Error obteniendo conteo de instructores en Supabase: $e');
+      }
+    }
+    final instructors = await getInstructors();
+    return instructors.isNotEmpty ? instructors.length : 18;
+  }
+
+  /// Conteo de categorías creadas de deportes disponibles en 'categories'
+  Future<int> getCategoriesCount() async {
+    final client = _client;
+    if (client != null) {
+      try {
+        final data = await client.from('categories').select('id, name');
+        final list = (data as List)
+            .where((c) => c['name'] != 'All Classes' && c['id'] != 'all')
+            .toList();
+        if (list.isNotEmpty) return list.length;
+      } catch (e) {
+        debugPrint('Error obteniendo conteo de categorías en Supabase: $e');
+      }
+    }
+    final cats = await getCategories();
+    final realCats =
+        cats.where((c) => c.id != 'all' && c.name != 'All Classes').toList();
+    return realCats.isNotEmpty ? realCats.length : 6;
+  }
+
+  /// Lista de perfiles registrados en Supabase
+  Future<List<UserProfileModel>> getRegisteredProfiles() async {
+    final client = _client;
+    if (client != null) {
+      try {
+        final data = await client
+            .from('profiles')
+            .select()
+            .order('full_name', ascending: true);
+        final list = data as List;
+        if (list.isNotEmpty) {
+          return list
+              .map((e) => UserProfileModel.fromJson(e))
+              .toList();
+        }
+      } catch (e) {
+        debugPrint('Error obteniendo lista de perfiles en Supabase: $e');
+      }
+    }
+    return [];
+  }
+
   Future<List<InstructorModel>> getInstructors() async {
     final client = _client;
     if (client != null) {
@@ -961,6 +1302,92 @@ class DatabaseService {
     return updated;
   }
 
+  /// Actualiza específicamente el horario (start_time, end_time) y el instructor asignado de una sesión
+  Future<ClassScheduleModel> updateScheduleTimeAndInstructor({
+    required String scheduleId,
+    required DateTime startTime,
+    required DateTime endTime,
+    required String instructorId,
+    String? locationName,
+  }) async {
+    final client = _client;
+    final durationMinutes = endTime.difference(startTime).inMinutes;
+
+    if (client != null) {
+      try {
+        final data = await client
+            .from('class_schedules')
+            .update({
+              'instructor_id': instructorId,
+              'start_time': startTime.toUtc().toIso8601String(),
+              'end_time': endTime.toUtc().toIso8601String(),
+              'location_name': ?locationName,
+            })
+            .eq('id', scheduleId)
+            .select('''
+              id,
+              class_id,
+              instructor_id,
+              start_time,
+              end_time,
+              capacity,
+              location_name,
+              is_live,
+              classes:class_id ( id, name, description, image_url, category_id, intensity, duration_minutes, base_price ),
+              instructors:instructor_id ( id, name, avatar_url, bio, rating )
+            ''')
+            .single();
+
+        // Actualizar duración si class_id existe
+        if (durationMinutes > 0 && data['class_id'] != null) {
+          try {
+            await client
+                .from('classes')
+                .update({'duration_minutes': durationMinutes})
+                .eq('id', data['class_id']);
+          } catch (_) {}
+        }
+
+        final updatedModel = ClassScheduleModel.fromJson(data);
+        final idx = _demoSchedules.indexWhere((s) => s.id == scheduleId);
+        if (idx >= 0) {
+          _demoSchedules[idx] = updatedModel;
+        }
+        return updatedModel;
+      } catch (e) {
+        debugPrint('Error actualizando horario e instructor en Supabase: $e');
+      }
+    }
+
+    // Modo local / demo fallback
+    final idx = _demoSchedules.indexWhere((s) => s.id == scheduleId);
+    final allInst = await getInstructors();
+    final inst = allInst.firstWhere(
+      (i) => i.id == instructorId,
+      orElse: () => allInst.first,
+    );
+
+    if (idx >= 0) {
+      final existing = _demoSchedules[idx];
+      final updatedGymClass = existing.gymClass?.copyWith(
+        durationMinutes: durationMinutes > 0 ? durationMinutes : existing.gymClass?.durationMinutes,
+      ) ?? existing.gymClass;
+
+      final updated = existing.copyWith(
+        startTime: startTime,
+        endTime: endTime,
+        instructorId: instructorId,
+        instructor: inst,
+        locationName: locationName ?? existing.locationName,
+        gymClass: updatedGymClass,
+      );
+      _demoSchedules[idx] = updated;
+      return updated;
+    }
+
+    throw Exception('Horario no encontrado para ID $scheduleId');
+  }
+
   Future<void> deleteClassSchedule(String scheduleId, {String? classId}) async {
     final client = _client;
     if (client != null) {
@@ -989,6 +1416,66 @@ class DatabaseService {
   ];
 
   static final List<ClassScheduleModel> _demoSchedules = [
+    // 1. Clase Pasada (Finalizada hoy más temprano)
+    ClassScheduleModel(
+      id: 'sched-past-1',
+      classId: 'class-past-1',
+      startTime: DateTime.now().subtract(const Duration(hours: 4)),
+      endTime: DateTime.now().subtract(const Duration(hours: 3)),
+      capacity: 18,
+      locationName: 'Arena Central • Zone A',
+      confirmedBookingsCount: 18,
+      gymClass: const GymClassModel(
+        id: 'class-past-1',
+        name: 'HIIT Morning Blast: Full Cardio',
+        description:
+            'Sesión matutina intensa con intervalos funcionales y kettlebells.',
+        imageUrl:
+            'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800',
+        categoryId: 'cat-hiit',
+        intensity: ClassIntensity.high,
+        durationMinutes: 60,
+        basePrice: 22.0,
+      ),
+      instructor: const InstructorModel(
+        id: 'e1111111-1111-1111-1111-111111111111',
+        name: 'Alex Johnson',
+        avatarUrl:
+            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        bio: 'HIIT & Performance Head Coach',
+        rating: 4.9,
+      ),
+    ),
+    // 2. Clase Pasada (Ayer)
+    ClassScheduleModel(
+      id: 'sched-past-2',
+      classId: 'class-past-2',
+      startTime: DateTime.now().subtract(const Duration(days: 1, hours: 2)),
+      endTime: DateTime.now().subtract(const Duration(days: 1, hours: 1)),
+      capacity: 15,
+      locationName: 'Box 2 • Olympic Weightlifting',
+      confirmedBookingsCount: 15,
+      gymClass: const GymClassModel(
+        id: 'class-past-2',
+        name: 'Olympic Lifting & Power Snatch',
+        description:
+            'Técnica de arranque y envión con cargas progresivas y barra olímpica.',
+        imageUrl:
+            'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=800',
+        categoryId: 'cat-crossfit',
+        intensity: ClassIntensity.high,
+        durationMinutes: 60,
+        basePrice: 25.0,
+      ),
+      instructor: const InstructorModel(
+        id: 'e4444444-4444-4444-4444-444444444444',
+        name: 'Marcus Vance',
+        avatarUrl:
+            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+        bio: 'Head Coach de CrossFit y levantamiento olímpico',
+        rating: 4.9,
+      ),
+    ),
     ClassScheduleModel(
       id: 'sched-1',
       classId: 'class-1',

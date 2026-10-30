@@ -41,6 +41,30 @@ class GymClassModel {
     );
   }
 
+  GymClassModel copyWith({
+    String? id,
+    String? name,
+    String? description,
+    String? imageUrl,
+    String? categoryId,
+    ClassIntensity? intensity,
+    int? durationMinutes,
+    double? basePrice,
+    CategoryModel? category,
+  }) {
+    return GymClassModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      imageUrl: imageUrl ?? this.imageUrl,
+      categoryId: categoryId ?? this.categoryId,
+      intensity: intensity ?? this.intensity,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
+      basePrice: basePrice ?? this.basePrice,
+      category: category ?? this.category,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

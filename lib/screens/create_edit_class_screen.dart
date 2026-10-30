@@ -159,10 +159,13 @@ class _CreateEditClassScreenState extends State<CreateEditClassScreen> {
   }
 
   Future<void> _pickDate() async {
+    final earliest = _selectedDate.isBefore(DateTime(2023))
+        ? _selectedDate
+        : DateTime(2023);
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      firstDate: earliest,
       lastDate: DateTime.now().add(const Duration(days: 365)),
       builder: (context, child) {
         return Theme(
@@ -801,42 +804,74 @@ class _CreateEditClassScreenState extends State<CreateEditClassScreen> {
 
   Widget _buildTopBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
       decoration: const BoxDecoration(
         color: Color(0xFF0C1017),
         border: Border(
           bottom: BorderSide(color: Color(0xFF192231), width: 1),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Botón Cancel
-          GestureDetector(
-            onTap: () => Navigator.of(context).maybePop(),
-            child: Text(
-              'Cancel',
-              style: AppTypography.style(
-                color: const Color(0xFF5B8CAE),
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+          // Drag handle para cuando se abre como ventana modal
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF334155),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Botón Cancelar
+              GestureDetector(
+                onTap: () => Navigator.of(context).maybePop(),
+                child: Text(
+                  'Cancelar',
+                  style: AppTypography.style(
+                    color: const Color(0xFF5B8CAE),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
 
-          // Título Centrado
-          Text(
-            _isEditMode ? 'Edit Class' : 'Create Class',
-            style: AppTypography.style(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.2,
-            ),
+              // Título Centrado
+              Text(
+                _isEditMode ? 'Editar Clase' : 'Crear Clase',
+                style: AppTypography.style(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.2,
+                ),
+              ),
+
+              // Botón Cerrar (X)
+              GestureDetector(
+                onTap: () => Navigator.of(context).maybePop(),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1E293B),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: Color(0xFF94A3B8),
+                    size: 18,
+                  ),
+                ),
+              ),
+            ],
           ),
-
-          // Espaciador balanceador
-          const SizedBox(width: 48),
         ],
       ),
     );
@@ -1600,7 +1635,7 @@ class _CreateEditClassScreenState extends State<CreateEditClassScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    _isEditMode ? 'Save Changes' : 'Create Class',
+                    _isEditMode ? 'Guardar Cambios' : 'Crear Clase',
                     style: AppTypography.style(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -1638,7 +1673,7 @@ class _CreateEditClassScreenState extends State<CreateEditClassScreen> {
                 size: 18,
               ),
         label: Text(
-          'Delete Class',
+          'Eliminar Clase',
           style: AppTypography.style(
             fontSize: 14,
             fontWeight: FontWeight.w700,

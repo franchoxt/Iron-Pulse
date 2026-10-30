@@ -6,6 +6,7 @@ import '../services/database_service.dart';
 import '../services/user_session_service.dart';
 import '../theme/app_theme.dart';
 import 'my_reservations_screen.dart';
+import 'personal_information_screen.dart';
 
 /// Pantalla de Perfil de Cliente para IRON PULSE.
 ///
@@ -56,6 +57,11 @@ class _ProfileViewState extends State<ProfileView> {
   Future<void> _loadProfileData() async {
     setState(() => _isLoading = true);
     final userSession = UserSessionService.instance;
+
+    if (userSession.profile == null &&
+        AuthService.instance.currentUser != null) {
+      await userSession.syncUserRole();
+    }
 
     _currentName =
         userSession.displayName.isNotEmpty &&
@@ -203,7 +209,7 @@ class _ProfileViewState extends State<ProfileView> {
                 iconColor: const Color(0xFF00A3E0),
                 iconBgColor: const Color(0xFF0B2535),
                 title: 'Personal Information',
-                onTap: () => _showPersonalInfoModal(),
+                onTap: () => _navigateToPersonalInfo(),
               ),
               const SizedBox(height: 10),
 
@@ -1012,68 +1018,15 @@ class _ProfileViewState extends State<ProfileView> {
   // MODALES INFORMATIVOS Y CONFIGURACIÓN
   // ===========================================================================
 
-  void _showPersonalInfoModal() {
-    final user = AuthService.instance.currentUser;
-    final email = user?.email ?? 'javier@pulse.com';
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Color(0xFF131924),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border(top: BorderSide(color: Color(0xFF222C3D), width: 1.2)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF334155),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Personal Information',
-              style: AppTypography.style(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 14),
-            _buildInfoRow('Nombre', _currentName),
-            _buildInfoRow('Email', email),
-            _buildInfoRow('Membresía', 'Gold Member (Ilimitada)'),
-            _buildInfoRow('Estado', 'Activo en IRON PULSE'),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E293B),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: const Text('Cerrar'),
-              ),
-            ),
-          ],
-        ),
+  Future<void> _navigateToPersonalInfo() async {
+    final updated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => const PersonalInformationScreen(),
       ),
     );
+    if (updated == true && mounted) {
+      _loadProfileData();
+    }
   }
 
   void _showMembershipModal() {
@@ -1351,6 +1304,24 @@ class _ProfileViewState extends State<ProfileView> {
                 );
               },
             ),
+            const Divider(color: Color(0xFF222C3D), height: 18),
+            ListTile(
+              leading: const Icon(
+                Icons.logout_rounded,
+                color: Color(0xFFEF4444),
+              ),
+              title: const Text(
+                'Cerrar Sesión',
+                style: TextStyle(
+                  color: Color(0xFFEF4444),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _confirmSignOut();
+              },
+            ),
           ],
         ),
       ),
@@ -1361,126 +1332,6 @@ class _ProfileViewState extends State<ProfileView> {
   // DIÁLOGO DE CONFIRMACIÓN DE CERRAR SESIÓN
   // ===========================================================================
   Future<void> _confirmSignOut() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.black.withValues(alpha: 0.72),
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF161C26),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFF263346), width: 1.2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.6),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFF3B1215),
-                  border: Border.all(
-                    color: const Color(0xFFEF4444).withValues(alpha: 0.4),
-                    width: 1.5,
-                  ),
-                ),
-                child: const Icon(
-                  Icons.logout_rounded,
-                  color: Color(0xFFEF4444),
-                  size: 28,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                'Cerrar Sesión',
-                style: AppTypography.style(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                '¿Estás seguro de que deseas salir de tu cuenta de IRON PULSE?',
-                textAlign: TextAlign.center,
-                style: AppTypography.style(
-                  color: const Color(0xFF94A3B8),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: Color(0xFF334155)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: Text(
-                        'Cancelar',
-                        style: AppTypography.style(
-                          color: const Color(0xFFCBD5E1),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFDC2626),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: Text(
-                        'Sí, Salir',
-                        style: AppTypography.style(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      await AuthService.instance.signOut();
-      if (mounted) {
-        Navigator.of(context)
-            .pushNamedAndRemoveUntil('/auth', (route) => false);
-      }
-    }
+    await AuthService.instance.showLogoutDialog(context);
   }
 }
