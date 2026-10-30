@@ -30,6 +30,14 @@ class UserSessionService extends ChangeNotifier {
   /// Indica si el usuario actual es cliente
   bool get isClient => role == UserRole.client;
 
+  /// Actualiza temporalmente el avatar de forma reactiva local
+  void updateAvatarLocally(String newAvatarUrl) {
+    if (_profile != null) {
+      _profile = _profile!.copyWith(avatarUrl: newAvatarUrl);
+      notifyListeners();
+    }
+  }
+
   /// Indica si se está cargando o sincronizando el rol
   bool get isLoading => _isLoading;
 

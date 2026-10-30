@@ -56,21 +56,47 @@ class ClassScheduleModel {
       bookingsCount = (json['bookings_count'] as num).toInt();
     }
 
+    GymClassModel? parsedGymClass;
+    final rawClass = json['classes'];
+    if (rawClass != null) {
+      if (rawClass is Map) {
+        parsedGymClass = GymClassModel.fromJson(Map<String, dynamic>.from(rawClass));
+      } else if (rawClass is List && rawClass.isNotEmpty) {
+        final first = rawClass.first;
+        if (first is Map) {
+          parsedGymClass = GymClassModel.fromJson(Map<String, dynamic>.from(first));
+        }
+      }
+    }
+
+    InstructorModel? parsedInstructor;
+    final rawInstructor = json['instructors'];
+    if (rawInstructor != null) {
+      if (rawInstructor is Map) {
+        parsedInstructor = InstructorModel.fromJson(Map<String, dynamic>.from(rawInstructor));
+      } else if (rawInstructor is List && rawInstructor.isNotEmpty) {
+        final first = rawInstructor.first;
+        if (first is Map) {
+          parsedInstructor = InstructorModel.fromJson(Map<String, dynamic>.from(first));
+        }
+      }
+    }
+
     return ClassScheduleModel(
-      id: json['id'] as String,
-      classId: json['class_id'] as String,
+      id: json['id'] as String? ?? 'sched-${DateTime.now().millisecondsSinceEpoch}',
+      classId: json['class_id'] as String? ?? '',
       instructorId: json['instructor_id'] as String?,
-      startTime: DateTime.parse(json['start_time'] as String).toLocal(),
-      endTime: DateTime.parse(json['end_time'] as String).toLocal(),
+      startTime: json['start_time'] != null
+          ? DateTime.parse(json['start_time'] as String).toLocal()
+          : DateTime.now(),
+      endTime: json['end_time'] != null
+          ? DateTime.parse(json['end_time'] as String).toLocal()
+          : DateTime.now().add(const Duration(minutes: 60)),
       capacity: json['capacity'] as int? ?? 20,
       locationName: json['location_name'] as String?,
       isLive: json['is_live'] as bool? ?? false,
-      gymClass: json['classes'] != null
-          ? GymClassModel.fromJson(json['classes'] as Map<String, dynamic>)
-          : null,
-      instructor: json['instructors'] != null
-          ? InstructorModel.fromJson(json['instructors'] as Map<String, dynamic>)
-          : null,
+      gymClass: parsedGymClass,
+      instructor: parsedInstructor,
       confirmedBookingsCount: bookingsCount,
     );
   }

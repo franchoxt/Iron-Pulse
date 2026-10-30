@@ -154,9 +154,21 @@ CREATE POLICY "Lectura pública de instructores" ON instructors FOR SELECT USING
 
 DROP POLICY IF EXISTS "Lectura pública de clases" ON classes;
 CREATE POLICY "Lectura pública de clases" ON classes FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Permitir insertar clases" ON classes;
+CREATE POLICY "Permitir insertar clases" ON classes FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir actualizar clases" ON classes;
+CREATE POLICY "Permitir actualizar clases" ON classes FOR UPDATE USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir eliminar clases" ON classes;
+CREATE POLICY "Permitir eliminar clases" ON classes FOR DELETE USING (true);
 
 DROP POLICY IF EXISTS "Lectura pública de horarios" ON class_schedules;
 CREATE POLICY "Lectura pública de horarios" ON class_schedules FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Permitir insertar horarios" ON class_schedules;
+CREATE POLICY "Permitir insertar horarios" ON class_schedules FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir actualizar horarios" ON class_schedules;
+CREATE POLICY "Permitir actualizar horarios" ON class_schedules FOR UPDATE USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir eliminar horarios" ON class_schedules;
+CREATE POLICY "Permitir eliminar horarios" ON class_schedules FOR DELETE USING (true);
 
 -- Políticas de Perfiles
 DROP POLICY IF EXISTS "Usuarios pueden leer perfiles" ON profiles;

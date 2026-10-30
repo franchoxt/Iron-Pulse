@@ -30,6 +30,22 @@ class UserProfileModel {
     );
   }
 
+  UserProfileModel copyWith({
+    String? id,
+    String? fullName,
+    String? avatarUrl,
+    UserRole? role,
+    DateTime? updatedAt,
+  }) {
+    return UserProfileModel(
+      id: id ?? this.id,
+      fullName: fullName ?? this.fullName,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      role: role ?? this.role,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

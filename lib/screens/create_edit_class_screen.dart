@@ -37,6 +37,7 @@ class _CreateEditClassScreenState extends State<CreateEditClassScreen> {
   late final TextEditingController _customInstructorController;
 
   late String _coverImageUrl;
+  late ClassIntensity _selectedIntensity;
   late DateTime _selectedDate;
   late TimeOfDay _startTime;
   late TimeOfDay _endTime;
@@ -93,6 +94,7 @@ class _CreateEditClassScreenState extends State<CreateEditClassScreen> {
     );
 
     _coverImageUrl = schedule?.gymClass?.imageUrl ?? _presetCovers.first['url']!;
+    _selectedIntensity = schedule?.gymClass?.intensity ?? ClassIntensity.medium;
     _imageUrlController = TextEditingController(text: _coverImageUrl);
     _customInstructorController = TextEditingController();
 
@@ -462,6 +464,7 @@ class _CreateEditClassScreenState extends State<CreateEditClassScreen> {
           startTime: startDateTime,
           endTime: endDateTime,
           capacity: _maxCapacity,
+          intensity: _selectedIntensity,
         );
 
         if (!mounted) return;
@@ -503,6 +506,7 @@ class _CreateEditClassScreenState extends State<CreateEditClassScreen> {
           startTime: startDateTime,
           endTime: endDateTime,
           capacity: _maxCapacity,
+          intensity: _selectedIntensity,
         );
 
         if (!mounted) return;
@@ -698,6 +702,13 @@ class _CreateEditClassScreenState extends State<CreateEditClassScreen> {
                       _buildLabel('Description'),
                       const SizedBox(height: 8),
                       _buildDescriptionField(),
+
+                      const SizedBox(height: 20),
+
+                      // Campo: Intensidad de los ejercicios (Bajo, Medio, Alto)
+                      _buildLabel('Intensidad de la Clase (Intensity)'),
+                      const SizedBox(height: 8),
+                      _buildIntensitySelector(),
 
                       const SizedBox(height: 20),
 
@@ -1254,6 +1265,158 @@ class _CreateEditClassScreenState extends State<CreateEditClassScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildIntensitySelector() {
+    return Row(
+      children: [
+        // Cuadro 1: Bajo (Low) - Verde
+        Expanded(
+          child: _buildIntensityBox(
+            intensity: ClassIntensity.low,
+            title: 'Bajo',
+            subtitle: 'Low',
+            color: AppColors.intensityLow,
+            icon: Icons.spa_outlined,
+          ),
+        ),
+        const SizedBox(width: 10),
+        // Cuadro 2: Medio (Medium) - Azul
+        Expanded(
+          child: _buildIntensityBox(
+            intensity: ClassIntensity.medium,
+            title: 'Medio',
+            subtitle: 'Medium',
+            color: AppColors.intensityMedium,
+            icon: Icons.bolt_rounded,
+          ),
+        ),
+        const SizedBox(width: 10),
+        // Cuadro 3: Alto (High) - Púrpura
+        Expanded(
+          child: _buildIntensityBox(
+            intensity: ClassIntensity.high,
+            title: 'Alto',
+            subtitle: 'High',
+            color: AppColors.intensityHigh,
+            icon: Icons.local_fire_department_rounded,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildIntensityBox({
+    required ClassIntensity intensity,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required IconData icon,
+  }) {
+    final isSelected = _selectedIntensity == intensity;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedIntensity = intensity;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color.withValues(alpha: 0.16)
+              : const Color(0xFF131924),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isSelected ? color : const Color(0xFF202A3B),
+            width: isSelected ? 2.0 : 1.2,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.28),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Icono superior con círculo contenedor
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? color.withValues(alpha: 0.22)
+                    : const Color(0xFF1B2332),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected
+                      ? color.withValues(alpha: 0.6)
+                      : const Color(0xFF2B364A),
+                  width: 1,
+                ),
+              ),
+              child: Icon(
+                icon,
+                color: isSelected ? color : const Color(0xFF64748B),
+                size: 20,
+              ),
+            ),
+            const SizedBox(height: 10),
+            // Título principal en español (Bajo, Medio, Alto)
+            Text(
+              title,
+              style: AppTypography.style(
+                color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                fontSize: 14,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                letterSpacing: -0.2,
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Badge / Subtítulo con el valor exacto de la base de datos (Low, Medium, High)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? color.withValues(alpha: 0.25)
+                    : const Color(0xFF1A2230),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                subtitle,
+                style: AppTypography.style(
+                  color: isSelected ? color : const Color(0xFF64748B),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Indicador de selección (Radio check circle)
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? color : const Color(0xFF475569),
+                  width: isSelected ? 4.5 : 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../services/database_service.dart';
 import 'schedule_view.dart';
-import 'admin_portal_view.dart';
 import 'profile_view.dart';
+import 'class_details_screen.dart';
+import 'my_reservations_screen.dart';
 
 /// Modelo de clase destacada (Featured Class)
 class FeaturedClassItem {
@@ -190,68 +192,100 @@ class _HomeScreenState extends State<HomeScreen> {
         .toList();
   }
 
-  Future<void> _handleBooking(FeaturedClassItem item) async {
-    final wasBooked = item.isBooked;
-    setState(() {
-      item.isBooked = !wasBooked;
-    });
-
+  Future<void> _openClassDetails(FeaturedClassItem item) async {
+    ClassScheduleModel? schedule;
     try {
-      if (!wasBooked) {
-        await DatabaseService.instance.bookClass(scheduleId: item.id);
-      } else {
-        await DatabaseService.instance.cancelBooking(item.id);
-      }
-    } catch (_) {
-      // Manejo silencioso con persistencia de estado local
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: item.isBooked
-            ? AppColors.cardBg
-            : AppColors.surfaceContainerHigh,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: item.isBooked
-                ? AppColors.successGreen
-                : AppColors.primaryBlue,
-            width: 1.2,
+      final schedules = await DatabaseService.instance.getSchedules();
+      schedule = schedules.firstWhere(
+        (s) => s.id == item.id || s.classId == item.id,
+        orElse: () => ClassScheduleModel(
+          id: item.id,
+          classId: 'class-${item.id}',
+          startTime: DateTime.now().add(const Duration(hours: 2)),
+          endTime: DateTime.now().add(const Duration(hours: 3)),
+          capacity: 20,
+          confirmedBookingsCount: item.hasSpots ? 16 : 20,
+          locationName: 'Main Arena • Studio A',
+          gymClass: GymClassModel(
+            id: 'class-${item.id}',
+            name: item.title,
+            imageUrl: item.networkImage,
+            durationMinutes: int.tryParse(item.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 45,
+            intensity: item.tag.contains('HIGH')
+                ? ClassIntensity.high
+                : (item.tag.contains('LOW') ? ClassIntensity.low : ClassIntensity.medium),
+            basePrice: 25.0,
+            description:
+                'Sesión de entrenamiento de alto impacto diseñada para maximizar fuerza, resistencia cardiovascular y quema de calorías.',
+          ),
+          instructor: const InstructorModel(
+            id: 'inst-sarah',
+            name: 'Coach Sarah',
+            avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+            bio: 'Head Coach de acondicionamiento metabólico y circuitos de potencia.',
+            rating: 4.9,
           ),
         ),
-        content: Row(
-          children: [
-            Icon(
-              item.isBooked
-                  ? Icons.check_circle_rounded
-                  : Icons.info_outline_rounded,
-              color: item.isBooked
-                  ? AppColors.successGreen
-                  : AppColors.primaryLight,
-              size: 20,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                item.isBooked
-                    ? (item.hasSpots
-                        ? '¡Reserva confirmada para ${item.title} a las ${item.time}!'
-                        : '¡Añadido a lista de espera para ${item.title}!')
-                    : 'Reserva cancelada para ${item.title}',
-                style: AppTypography.style(
-                  color: AppColors.onSurface,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+      );
+    } catch (_) {
+      // Fallback
+    }
+
+    if (!mounted || schedule == null) return;
+    final updated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ClassDetailsScreen(
+          schedule: schedule!,
+          isInitialBooked: item.isBooked,
         ),
+      ),
+    );
+
+    if (updated != null && mounted) {
+      setState(() {
+        item.isBooked = updated;
+      });
+    }
+  }
+
+  Future<void> _openUpcomingClassDetails(UpcomingClassItem item) async {
+    ClassScheduleModel? schedule;
+    try {
+      final schedules = await DatabaseService.instance.getSchedules();
+      schedule = schedules.firstWhere(
+        (s) => s.id == item.id || s.classId == item.id,
+        orElse: () => ClassScheduleModel(
+          id: item.id,
+          classId: 'class-${item.id}',
+          startTime: DateTime.now().add(const Duration(hours: 3)),
+          endTime: DateTime.now().add(const Duration(hours: 4)),
+          capacity: 20,
+          confirmedBookingsCount: 15,
+          locationName: item.instructorOrLocation,
+          gymClass: GymClassModel(
+            id: 'class-${item.id}',
+            name: item.title,
+            imageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800',
+            durationMinutes: int.tryParse(item.durationOrInfo.replaceAll(RegExp(r'[^0-9]'), '')) ?? 45,
+            intensity: ClassIntensity.medium,
+            basePrice: 20.0,
+            description: 'Sesión de entrenamiento de alto impacto en Iron Pulse.',
+          ),
+          instructor: InstructorModel(
+            id: 'inst-${item.id}',
+            name: item.instructorOrLocation,
+            avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+            bio: 'Coach especialista en acondicionamiento físico.',
+            rating: 4.9,
+          ),
+        ),
+      );
+    } catch (_) {}
+
+    if (!mounted || schedule == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ClassDetailsScreen(schedule: schedule!),
       ),
     );
   }
@@ -390,7 +424,11 @@ class _HomeScreenState extends State<HomeScreen> {
         currentBody = const ScheduleView();
         break;
       case 2:
-        currentBody = const AdminPortalView();
+        currentBody = MyReservationsScreen(
+          isFromBottomNav: true,
+          onNavigateToHome: () => setState(() => _currentNavIndex = 0),
+          onNavigateToExplore: () => setState(() => _currentNavIndex = 1),
+        );
         break;
       case 3:
         currentBody = const ProfileView();
@@ -454,46 +492,50 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Avatar with secondary status indicator
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.surfaceContainerHigh,
-                      border: Border.all(
-                        color: AppColors.outlineVariant.withValues(alpha: 0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.person_rounded,
-                        color: AppColors.primaryLight,
-                        size: 22,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      width: 10,
-                      height: 10,
+              // Avatar with secondary status indicator (Tapping navigates to Profile)
+              GestureDetector(
+                onTap: () => setState(() => _currentNavIndex = 3),
+                behavior: HitTestBehavior.opaque,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
-                        color: AppColors.secondary,
                         shape: BoxShape.circle,
+                        color: AppColors.surfaceContainerHigh,
                         border: Border.all(
-                          color: const Color(0xFF111319),
-                          width: 2,
+                          color: AppColors.outlineVariant.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.person_rounded,
+                          color: AppColors.primaryLight,
+                          size: 22,
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFF111319),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(width: 12),
 
@@ -610,14 +652,14 @@ class _HomeScreenState extends State<HomeScreen> {
               GestureDetector(
                 onTap: () {
                   setState(() {
-                    _selectedCategory = 'All Classes';
+                    _currentNavIndex = 1;
                   });
                 },
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'See All',
+                      'Mostrar todas',
                       style: AppTypography.style(
                         color: AppColors.primaryLight,
                         fontSize: 12.5,
@@ -880,7 +922,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: () => _handleBooking(item),
+                      onPressed: () => _openClassDetails(item),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: item.isBooked
                             ? const Color(0xFF003824)
@@ -1018,33 +1060,49 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section Title + 13 Badge
+          // Section Title + 13 Badge + Link a Mis Reservas
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Upcoming Classes',
-                style: AppTypography.style(
-                  color: AppColors.onSurface,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.outlineVariant.withValues(alpha: 0.3),
-                    width: 1,
+              Row(
+                children: [
+                  Text(
+                    'Upcoming Classes',
+                    style: AppTypography.style(
+                      color: AppColors.onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.outlineVariant.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      '13',
+                      style: AppTypography.style(
+                        color: AppColors.onSurfaceVariant,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              GestureDetector(
+                onTap: () => setState(() => _currentNavIndex = 2),
                 child: Text(
-                  '13',
+                  'Mis Reservas',
                   style: AppTypography.style(
-                    color: AppColors.onSurfaceVariant,
-                    fontSize: 10.5,
+                    color: AppColors.primaryLight,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1077,142 +1135,173 @@ class _HomeScreenState extends State<HomeScreen> {
                 return _buildUpcomingClassCard(item);
               },
             ),
+
+          const SizedBox(height: 14),
+
+          // Botón explícito para mostrar todas las clases disponibles
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: () => setState(() => _currentNavIndex = 1),
+              icon: const Icon(Icons.calendar_month_rounded, size: 18, color: AppColors.primaryLight),
+              label: Text(
+                'Mostrar todas las clases',
+                style: AppTypography.style(
+                  color: AppColors.primaryLight,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: AppColors.primaryLight.withValues(alpha: 0.35), width: 1.2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                backgroundColor: AppColors.surfaceContainerHigh.withValues(alpha: 0.4),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildUpcomingClassCard(UpcomingClassItem item) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.06),
-          width: 1,
+    return GestureDetector(
+      onTap: () => _openUpcomingClassDetails(item),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainer,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.06),
+            width: 1,
+          ),
         ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Left Time Capsule Container (Responsive capsule)
-          Container(
-            width: 68,
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.04),
-                width: 1,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Left Time Capsule Container (Responsive capsule)
+            Container(
+              width: 68,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item.dayLabel,
+                    maxLines: 1,
+                    style: AppTypography.style(
+                      color: AppColors.outline,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    item.time,
+                    maxLines: 1,
+                    style: AppTypography.style(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  item.dayLabel,
-                  maxLines: 1,
-                  style: AppTypography.style(
-                    color: AppColors.outline,
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  item.time,
-                  maxLines: 1,
-                  style: AppTypography.style(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 14),
+            const SizedBox(width: 14),
 
-          // Center Details
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  item.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.style(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(
-                      item.isLocation
-                          ? Icons.fitness_center_rounded
-                          : Icons.person_rounded,
-                      color: AppColors.primaryLight,
-                      size: 14,
+            // Center Details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.style(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        item.instructorOrLocation,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTypography.style(
-                          color: AppColors.primaryLight,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        item.isLocation
+                            ? Icons.fitness_center_rounded
+                            : Icons.person_rounded,
+                        color: AppColors.primaryLight,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          item.instructorOrLocation,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.style(
+                            color: AppColors.primaryLight,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      '•',
-                      style: TextStyle(
-                        color: AppColors.outlineVariant,
-                        fontSize: 11,
+                      const SizedBox(width: 6),
+                      const Text(
+                        '•',
+                        style: TextStyle(
+                          color: AppColors.outlineVariant,
+                          fontSize: 11,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    if (!item.isLocation) ...[
-                      const Icon(
-                        Icons.timer_outlined,
-                        color: AppColors.outline,
-                        size: 13,
+                      const SizedBox(width: 6),
+                      if (!item.isLocation) ...[
+                        const Icon(
+                          Icons.timer_outlined,
+                          color: AppColors.outline,
+                          size: 13,
+                        ),
+                        const SizedBox(width: 3),
+                      ],
+                      Text(
+                        item.durationOrInfo,
+                        style: AppTypography.style(
+                          color: AppColors.onSurfaceVariant,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                        ),
                       ),
-                      const SizedBox(width: 3),
                     ],
-                    Text(
-                      item.durationOrInfo,
-                      style: AppTypography.style(
-                        color: AppColors.onSurfaceVariant,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
+            const SizedBox(width: 8),
 
-          // Right Status Badge Pill
-          _buildStatusBadge(item.status),
-        ],
+            // Right Status Badge Pill
+            _buildStatusBadge(item.status),
+          ],
+        ),
       ),
     );
   }
@@ -1302,17 +1391,17 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildBottomNavItem(
                 index: 1,
                 icon: Icons.calendar_month_rounded,
-                label: 'Schedule',
+                label: 'Classes',
               ),
               _buildBottomNavItem(
                 index: 2,
-                icon: Icons.admin_panel_settings_rounded,
-                label: 'Admin',
+                icon: Icons.bookmark_border_rounded,
+                label: 'Bookings',
               ),
               _buildBottomNavItem(
                 index: 3,
                 icon: Icons.person_rounded,
-                label: 'Perfil',
+                label: 'Profile',
               ),
             ],
           ),

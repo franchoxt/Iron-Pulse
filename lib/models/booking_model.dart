@@ -44,17 +44,33 @@ class BookingModel {
   }
 
   factory BookingModel.fromJson(Map<String, dynamic> json) {
+    ClassScheduleModel? parsedSchedule;
+    final rawSchedule = json['class_schedules'];
+    if (rawSchedule != null) {
+      if (rawSchedule is Map) {
+        parsedSchedule = ClassScheduleModel.fromJson(
+          Map<String, dynamic>.from(rawSchedule),
+        );
+      } else if (rawSchedule is List && rawSchedule.isNotEmpty) {
+        final first = rawSchedule.first;
+        if (first is Map) {
+          parsedSchedule = ClassScheduleModel.fromJson(
+            Map<String, dynamic>.from(first),
+          );
+        }
+      }
+    }
+
     return BookingModel(
-      id: json['id'] as String,
-      userId: json['user_id'] as String,
-      scheduleId: json['schedule_id'] as String,
+      id: json['id'] as String? ?? 'booking-${DateTime.now().millisecondsSinceEpoch}',
+      userId: json['user_id'] as String? ?? '',
+      scheduleId: json['schedule_id'] as String? ?? '',
       status: BookingStatus.fromString(json['status'] as String?),
       isPresent: json['is_present'] as bool? ?? false,
-      createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
-      schedule: json['class_schedules'] != null
-          ? ClassScheduleModel.fromJson(
-              json['class_schedules'] as Map<String, dynamic>)
-          : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String).toLocal()
+          : DateTime.now(),
+      schedule: parsedSchedule,
     );
   }
 

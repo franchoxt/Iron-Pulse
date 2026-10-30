@@ -7,6 +7,7 @@ import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/create_edit_class_screen.dart';
+import 'screens/my_reservations_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +49,7 @@ class IronPulseApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(athleteName: 'Javier'),
         '/admin': (context) => const AdminDashboardScreen(),
         '/create-class': (context) => const CreateEditClassScreen.create(),
+        '/bookings': (context) => const MyReservationsScreen(),
       },
     );
   }

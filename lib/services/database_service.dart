@@ -107,6 +107,8 @@ class DatabaseService {
   // ===========================================================================
   // 3. RESERVAS (Bookings & Check-in)
   // ===========================================================================
+  final List<BookingModel> _sessionBookings = [];
+
   Future<BookingModel> bookClass({required String scheduleId}) async {
     final client = _client;
     final user = AuthService.instance.currentUser;
@@ -126,6 +128,40 @@ class DatabaseService {
 
     if (client != null && user != null) {
       try {
+        // 0. Si ya existe una reserva para este usuario y sesión, retornarla directamente
+        final existingUserBooking = await client
+            .from('bookings')
+            .select('''
+              id,
+              user_id,
+              schedule_id,
+              status,
+              is_present,
+              created_at,
+              class_schedules (
+                id,
+                class_id,
+                instructor_id,
+                start_time,
+                end_time,
+                capacity,
+                location_name,
+                is_live,
+                classes ( id, name, description, image_url, intensity, duration_minutes, base_price ),
+                instructors ( id, name, avatar_url, bio, rating )
+              )
+            ''')
+            .eq('user_id', user.id)
+            .eq('schedule_id', validScheduleId)
+            .maybeSingle();
+
+        if (existingUserBooking != null) {
+          final model = BookingModel.fromJson(Map<String, dynamic>.from(existingUserBooking));
+          _sessionBookings.removeWhere((b) => b.scheduleId == validScheduleId);
+          _sessionBookings.insert(0, model);
+          return model;
+        }
+
         // 1. Verificar cupos actuales
         final existingBookings = await client
             .from('bookings')
@@ -171,53 +207,411 @@ class DatabaseService {
                 capacity,
                 location_name,
                 is_live,
-                classes ( id, name, description, image_url, intensity, duration_minutes, base_price )
+                classes ( id, name, description, image_url, intensity, duration_minutes, base_price ),
+                instructors ( id, name, avatar_url, bio, rating )
               )
             ''')
             .single();
 
-        return BookingModel.fromJson(inserted);
+        final model = BookingModel.fromJson(Map<String, dynamic>.from(inserted));
+        _sessionBookings.removeWhere((b) => b.scheduleId == validScheduleId);
+        _sessionBookings.insert(0, model);
+        return model;
       } catch (e) {
+        if (e.toString().contains('bookings_user_id_schedule_id_key') ||
+            e.toString().contains('23505') ||
+            e.toString().contains('duplicate key')) {
+          final existing = await client
+              .from('bookings')
+              .select('''
+                id,
+                user_id,
+                schedule_id,
+                status,
+                is_present,
+                created_at,
+                class_schedules (
+                  id,
+                  class_id,
+                  instructor_id,
+                  start_time,
+                  end_time,
+                  capacity,
+                  location_name,
+                  is_live,
+                  classes ( id, name, description, image_url, intensity, duration_minutes, base_price ),
+                  instructors ( id, name, avatar_url, bio, rating )
+                )
+              ''')
+              .eq('user_id', user.id)
+              .eq('schedule_id', validScheduleId)
+              .maybeSingle();
+          if (existing != null) {
+            final model = BookingModel.fromJson(Map<String, dynamic>.from(existing));
+            _sessionBookings.removeWhere((b) => b.scheduleId == validScheduleId);
+            _sessionBookings.insert(0, model);
+            return model;
+          }
+        }
         debugPrint('Error en reserva remota: $e');
-        rethrow;
       }
     }
 
-    // Modo local / demo
-    return BookingModel(
-      id: 'demo-booking-${DateTime.now().millisecondsSinceEpoch}',
-      userId: user?.id ?? 'demo-user',
+    // Modo local / sesión fallback
+    ClassScheduleModel? matchedSchedule;
+    try {
+      final allSchedules = await getSchedules();
+      matchedSchedule = allSchedules.firstWhere((s) => s.id == validScheduleId);
+    } catch (_) {}
+    matchedSchedule ??= _demoSchedules.firstWhere(
+      (s) => s.id == validScheduleId,
+      orElse: () => _demoSchedules.first,
+    );
+
+    final localBooking = BookingModel(
+      id: 'session-booking-${DateTime.now().millisecondsSinceEpoch}',
+      userId: user?.id ?? 'athlete-user',
       scheduleId: validScheduleId,
       status: BookingStatus.confirmed,
       isPresent: false,
       createdAt: DateTime.now(),
+      schedule: matchedSchedule,
     );
+    _sessionBookings.removeWhere((b) => b.scheduleId == validScheduleId);
+    _sessionBookings.insert(0, localBooking);
+
+    return localBooking;
   }
 
-  /// Cancelar una reserva
-  Future<void> cancelBooking(String bookingOrScheduleId) async {
+  /// Verifica si el usuario actual ya tiene reservada una sesión específica
+  Future<bool> isUserBooked(String scheduleId) async {
+    final uuidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+    String validScheduleId = scheduleId;
+    if (!uuidRegex.hasMatch(scheduleId)) {
+      if (scheduleId.contains('2')) {
+        validScheduleId = '22222222-2222-2222-2222-222222222222';
+      } else if (scheduleId.contains('3')) {
+        validScheduleId = '33333333-3333-3333-3333-333333333333';
+      } else {
+        validScheduleId = '11111111-1111-1111-1111-111111111111';
+      }
+    }
+
+    // 1. Verificar primero en reservas activas de sesión
+    final inSession = _sessionBookings.any(
+      (b) => (b.scheduleId == validScheduleId || b.id == validScheduleId) && b.status != BookingStatus.cancelled,
+    );
+    if (inSession) return true;
+
+    // 2. Verificar en Supabase
     final client = _client;
     final user = AuthService.instance.currentUser;
     if (client != null && user != null) {
       try {
-        final uuidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
-        String targetId = bookingOrScheduleId;
-        if (!uuidRegex.hasMatch(targetId)) {
-          if (targetId.contains('2')) {
-            targetId = '22222222-2222-2222-2222-222222222222';
-          } else if (targetId.contains('3')) {
-            targetId = '33333333-3333-3333-3333-333333333333';
-          } else {
-            targetId = '11111111-1111-1111-1111-111111111111';
-          }
-        }
+        final existing = await client
+            .from('bookings')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('schedule_id', validScheduleId)
+            .maybeSingle();
+        return existing != null;
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /// Cancelar una reserva
+  Future<bool> cancelBooking(String bookingOrScheduleId) async {
+    final uuidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+    String targetId = bookingOrScheduleId;
+    if (!uuidRegex.hasMatch(targetId)) {
+      if (targetId.contains('2')) {
+        targetId = '22222222-2222-2222-2222-222222222222';
+      } else if (targetId.contains('3')) {
+        targetId = '33333333-3333-3333-3333-333333333333';
+      } else {
+        targetId = '11111111-1111-1111-1111-111111111111';
+      }
+    }
+
+    // Remover de reservas de sesión
+    _sessionBookings.removeWhere(
+      (b) => b.id == targetId || b.scheduleId == targetId,
+    );
+
+    final client = _client;
+    final user = AuthService.instance.currentUser;
+    if (client != null && user != null) {
+      try {
         await client
             .from('bookings')
             .delete()
             .or('id.eq.$targetId,schedule_id.eq.$targetId')
             .eq('user_id', user.id);
-      } catch (_) {}
+        return true;
+      } catch (e) {
+        debugPrint('Error cancelando reserva: $e');
+        return false;
+      }
     }
+    return true;
+  }
+
+  /// Obtiene todas las reservaciones del usuario actual desde Supabase (tabla 'bookings')
+  Future<List<BookingModel>> getUserBookings({String? userId}) async {
+    final client = _client;
+    final currentUserId = userId ?? AuthService.instance.currentUser?.id;
+    final List<BookingModel> result = [];
+
+    if (client != null && currentUserId != null) {
+      try {
+        final data = await client
+            .from('bookings')
+            .select('''
+              id,
+              user_id,
+              schedule_id,
+              status,
+              is_present,
+              created_at,
+              class_schedules (
+                id,
+                class_id,
+                instructor_id,
+                start_time,
+                end_time,
+                capacity,
+                location_name,
+                is_live,
+                classes (
+                  id,
+                  name,
+                  description,
+                  image_url,
+                  category_id,
+                  intensity,
+                  duration_minutes,
+                  base_price
+                ),
+                instructors (
+                  id,
+                  name,
+                  avatar_url,
+                  bio,
+                  rating
+                )
+              )
+            ''')
+            .eq('user_id', currentUserId)
+            .order('created_at', ascending: false);
+
+        for (final item in (data as List)) {
+          try {
+            final b = BookingModel.fromJson(Map<String, dynamic>.from(item as Map));
+            result.add(b);
+          } catch (err) {
+            debugPrint('Error parseando reserva de Supabase: $err');
+          }
+        }
+      } catch (e) {
+        debugPrint('Error cargando reservas de usuario desde Supabase: $e');
+      }
+    }
+
+    // Fusionar con las reservas creadas en la sesión actual
+    for (final sessionBooking in _sessionBookings) {
+      final exists = result.any(
+        (b) => b.scheduleId == sessionBooking.scheduleId || b.id == sessionBooking.id,
+      );
+      if (!exists && sessionBooking.status != BookingStatus.cancelled) {
+        result.insert(0, sessionBooking);
+      }
+    }
+
+    // Si existen reservas reales del usuario, devolverlas
+    if (result.isNotEmpty) {
+      return result;
+    }
+
+    return _getDemoBookings();
+  }
+
+  List<BookingModel> _getDemoBookings() {
+    final now = DateTime.now();
+    final today8am = DateTime(now.year, now.month, now.day, 8, 0);
+    final today630pm = DateTime(now.year, now.month, now.day, 18, 30);
+    final nextWed = now.add(const Duration(days: 2));
+    final nextWed7am = DateTime(nextWed.year, nextWed.month, nextWed.day, 7, 0);
+    final yesterday = now.subtract(const Duration(days: 1));
+    final yesterday10am = DateTime(yesterday.year, yesterday.month, yesterday.day, 10, 0);
+    final threeDaysAgo = now.subtract(const Duration(days: 3));
+    final threeDaysAgo5pm = DateTime(threeDaysAgo.year, threeDaysAgo.month, threeDaysAgo.day, 17, 0);
+
+    return [
+      BookingModel(
+        id: 'booking-demo-1',
+        userId: 'demo-user',
+        scheduleId: '11111111-1111-1111-1111-111111111111',
+        status: BookingStatus.confirmed,
+        isPresent: false,
+        createdAt: now.subtract(const Duration(days: 1)),
+        schedule: ClassScheduleModel(
+          id: '11111111-1111-1111-1111-111111111111',
+          classId: 'class-hiit',
+          startTime: today8am,
+          endTime: today8am.add(const Duration(minutes: 45)),
+          capacity: 20,
+          locationName: 'Room A • Main Studio',
+          gymClass: const GymClassModel(
+            id: 'class-hiit',
+            name: 'HIIT Intensity',
+            description: 'Circuito de alta intensidad enfocado en quema de calorías y aceleración metabólica.',
+            imageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800',
+            intensity: ClassIntensity.high,
+            durationMinutes: 45,
+            basePrice: 25.0,
+          ),
+          instructor: const InstructorModel(
+            id: 'inst-alex',
+            name: 'Alex Cross',
+            avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+            bio: 'Especialista en entrenamiento HIIT y acondicionamiento cardiovascular.',
+            rating: 4.9,
+          ),
+        ),
+      ),
+      BookingModel(
+        id: 'booking-demo-2',
+        userId: 'demo-user',
+        scheduleId: '22222222-2222-2222-2222-222222222222',
+        status: BookingStatus.waitlist,
+        isPresent: false,
+        createdAt: now.subtract(const Duration(hours: 12)),
+        schedule: ClassScheduleModel(
+          id: '22222222-2222-2222-2222-222222222222',
+          classId: 'class-yoga',
+          startTime: today630pm,
+          endTime: today630pm.add(const Duration(minutes: 60)),
+          capacity: 15,
+          locationName: 'Room B • Quiet Zone',
+          gymClass: const GymClassModel(
+            id: 'class-yoga',
+            name: 'Sunset Yoga',
+            description: 'Secuencia relajante para mejorar flexibilidad, equilibrio y recuperación muscular.',
+            imageUrl: 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=800',
+            intensity: ClassIntensity.low,
+            durationMinutes: 60,
+            basePrice: 20.0,
+          ),
+          instructor: const InstructorModel(
+            id: 'inst-sarah-j',
+            name: 'Sarah Jenkins',
+            avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+            bio: 'Instructora certificada de Vinyasa y Hatha Yoga.',
+            rating: 5.0,
+          ),
+        ),
+      ),
+      BookingModel(
+        id: 'booking-demo-3',
+        userId: 'demo-user',
+        scheduleId: '33333333-3333-3333-3333-333333333333',
+        status: BookingStatus.confirmed,
+        isPresent: false,
+        createdAt: now.subtract(const Duration(days: 2)),
+        schedule: ClassScheduleModel(
+          id: '33333333-3333-3333-3333-333333333333',
+          classId: 'class-crossfit',
+          startTime: nextWed7am,
+          endTime: nextWed7am.add(const Duration(minutes: 60)),
+          capacity: 18,
+          locationName: 'Box 1 • Outdoor Area',
+          gymClass: const GymClassModel(
+            id: 'class-crossfit',
+            name: 'CrossFit Advanced',
+            description: 'WOD desafiante con levantamientos olímpicos, gimnásticos y trabajo en equipo.',
+            imageUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=800',
+            intensity: ClassIntensity.high,
+            durationMinutes: 60,
+            basePrice: 30.0,
+          ),
+          instructor: const InstructorModel(
+            id: 'inst-mike',
+            name: 'Mike T.',
+            avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+            bio: 'Head Coach de CrossFit Level 3.',
+            rating: 4.8,
+          ),
+        ),
+      ),
+      // Historial (Clases pasadas)
+      BookingModel(
+        id: 'booking-demo-4',
+        userId: 'demo-user',
+        scheduleId: '44444444-4444-4444-4444-444444444444',
+        status: BookingStatus.confirmed,
+        isPresent: true,
+        createdAt: yesterday.subtract(const Duration(days: 1)),
+        schedule: ClassScheduleModel(
+          id: '44444444-4444-4444-4444-444444444444',
+          classId: 'class-power',
+          startTime: yesterday10am,
+          endTime: yesterday10am.add(const Duration(minutes: 45)),
+          capacity: 15,
+          locationName: 'Main Arena • Studio A',
+          gymClass: const GymClassModel(
+            id: 'class-power',
+            name: 'Power Circuit',
+            description: 'Sesión metabólica con intervalos de fuerza y acondicionamiento.',
+            imageUrl: 'https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=800',
+            intensity: ClassIntensity.medium,
+            durationMinutes: 45,
+            basePrice: 22.0,
+          ),
+          instructor: const InstructorModel(
+            id: 'inst-elena',
+            name: 'Elena Rostova',
+            avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150',
+            bio: 'Especialista en movilidad y fuerza funcional.',
+            rating: 5.0,
+          ),
+        ),
+      ),
+      BookingModel(
+        id: 'booking-demo-5',
+        userId: 'demo-user',
+        scheduleId: '55555555-5555-5555-5555-555555555555',
+        status: BookingStatus.cancelled,
+        isPresent: false,
+        createdAt: threeDaysAgo.subtract(const Duration(days: 1)),
+        schedule: ClassScheduleModel(
+          id: '55555555-5555-5555-5555-555555555555',
+          classId: 'class-mobility',
+          startTime: threeDaysAgo5pm,
+          endTime: threeDaysAgo5pm.add(const Duration(minutes: 50)),
+          capacity: 15,
+          locationName: 'Studio B',
+          gymClass: const GymClassModel(
+            id: 'class-mobility',
+            name: 'Mobility Flow',
+            description: 'Liberación miofascial y estiramientos profundos.',
+            imageUrl: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800',
+            intensity: ClassIntensity.low,
+            durationMinutes: 50,
+            basePrice: 18.0,
+          ),
+          instructor: const InstructorModel(
+            id: 'inst-carlos',
+            name: 'Carlos Vega',
+            avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+            bio: 'Especialista en rehabilitación y movilidad articular.',
+            rating: 4.8,
+          ),
+        ),
+      ),
+    ];
   }
 
   /// Check-in de estudiantes (Gestión de presencia por el Admin o Instructor)
@@ -297,6 +691,30 @@ class DatabaseService {
       }
     }
     return null;
+  }
+
+  /// Actualiza datos del perfil del usuario (nombre y/o avatarUrl) en Supabase.
+  Future<bool> updateUserProfile({
+    String? fullName,
+    String? avatarUrl,
+  }) async {
+    final client = _client;
+    final user = AuthService.instance.currentUser;
+    if (client != null && user != null) {
+      try {
+        final Map<String, dynamic> updates = {
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        };
+        if (fullName != null && fullName.isNotEmpty) updates['full_name'] = fullName;
+        if (avatarUrl != null && avatarUrl.isNotEmpty) updates['avatar_url'] = avatarUrl;
+
+        await client.from('profiles').update(updates).eq('id', user.id);
+        return true;
+      } catch (e) {
+        debugPrint('Error actualizando perfil en Supabase: $e');
+      }
+    }
+    return false;
   }
 
   // ===========================================================================
@@ -413,6 +831,7 @@ class DatabaseService {
         return ClassScheduleModel.fromJson(insertedSchedule);
       } catch (e) {
         debugPrint('Error creando clase en Supabase: $e');
+        rethrow;
       }
     }
 
@@ -505,6 +924,7 @@ class DatabaseService {
         return ClassScheduleModel.fromJson(updatedSchedule);
       } catch (e) {
         debugPrint('Error actualizando clase en Supabase: $e');
+        rethrow;
       }
     }
 
