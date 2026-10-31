@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../theme/app_theme.dart';
+import 'instructor_profile_screen.dart';
 
 /// Pantalla de Detalles de la Clase para IRON PULSE.
 ///
@@ -596,104 +597,10 @@ class _ClassDetailsScreenState extends State<ClassDetailsScreen> {
   }
 
   void _showInstructorProfile(InstructorModel instructor) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(
-            color: Color(0xFF131924),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border(
-              top: BorderSide(color: Color(0xFF222C3D), width: 1.2),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF334155),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              CircleAvatar(
-                radius: 44,
-                backgroundColor: const Color(0xFF1E293B),
-                backgroundImage: NetworkImage(
-                  instructor.avatarUrl ??
-                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                instructor.name,
-                style: AppTypography.style(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 18),
-                  const SizedBox(width: 4),
-                  Text(
-                    instructor.rating.toStringAsFixed(1),
-                    style: AppTypography.style(
-                      color: const Color(0xFFF59E0B),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '• Head Coach',
-                    style: AppTypography.style(
-                      color: const Color(0xFF64748B),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                instructor.bio ??
-                    'Especialista certificado en acondicionamiento metabólico y entrenamiento de alto rendimiento.',
-                textAlign: TextAlign.center,
-                style: AppTypography.style(
-                  color: const Color(0xFF94A3B8),
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E293B),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Text('Cerrar'),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InstructorProfileScreen(instructor: instructor),
+      ),
     );
   }
 

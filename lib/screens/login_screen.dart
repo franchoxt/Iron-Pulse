@@ -11,6 +11,7 @@ import '../widgets/neon_button.dart';
 import '../widgets/social_buttons.dart';
 import '../widgets/auth_segmented_switch.dart';
 import 'admin_dashboard_screen.dart';
+import 'instructor_home_screen.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -87,20 +88,100 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    if (email.isEmpty || password.isEmpty) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => const AdminDashboardScreen(adminName: 'Admin'),
-        ),
+    final emailLower = email.toLowerCase();
+    final isInstructorEmail = emailLower.contains('alex') ||
+        emailLower.contains('sarah') ||
+        emailLower.contains('carlos') ||
+        emailLower.contains('m.vance') ||
+        emailLower.contains('elena') ||
+        emailLower.contains('instructor') ||
+        emailLower.contains('atleta.test');
+    final isAdminEmail = emailLower.contains('admin') || emailLower.contains('coach.mike');
+
+    if (email.isEmpty) {
+      _showFeedback(
+        'Por favor ingresa tu correo electrónico o selecciona un usuario sugerido',
+        isError: true,
       );
       return;
     }
 
+    // Modo rápido / bypass sin contraseña para cuentas demo o pruebas locales
+    if (password.isEmpty) {
+      if (isInstructorEmail) {
+        final instructorName = emailLower.contains('sarah')
+            ? 'Sarah Jenkins'
+            : (emailLower.contains('carlos') ? 'Carlos Vega' : 'Alex Johnson');
+        UserSessionService.instance.setManualSession(
+          name: instructorName,
+          role: UserRole.instructor,
+          email: email,
+        );
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => InstructorHomeScreen(
+              instructorName: instructorName,
+            ),
+          ),
+        );
+        return;
+      } else if (isAdminEmail) {
+        UserSessionService.instance.setManualSession(
+          name: 'Admin',
+          role: UserRole.admin,
+          email: email,
+        );
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => const AdminDashboardScreen(adminName: 'Admin'),
+          ),
+        );
+        return;
+      } else {
+        UserSessionService.instance.setManualSession(
+          name: 'Atleta',
+          role: UserRole.client,
+          email: email,
+        );
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => const HomeScreen(athleteName: 'Atleta'),
+          ),
+        );
+        return;
+      }
+    }
+
     if (!SupabaseConfig.isConfigured) {
-      _showFeedback(
-        '⚙️ Configura tu URL y Anon Key en el archivo .env para conectar con Supabase',
-        isError: true,
-      );
+      if (isInstructorEmail) {
+        UserSessionService.instance.setManualSession(
+          name: 'Alex Johnson',
+          role: UserRole.instructor,
+          email: email,
+        );
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => const InstructorHomeScreen(instructorName: 'Alex Johnson'),
+          ),
+        );
+      } else if (isAdminEmail) {
+        UserSessionService.instance.setManualSession(
+          name: 'Admin',
+          role: UserRole.admin,
+          email: email,
+        );
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => const AdminDashboardScreen(adminName: 'Admin'),
+          ),
+        );
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => const HomeScreen(athleteName: 'Atleta'),
+          ),
+        );
+      }
       return;
     }
 
@@ -120,15 +201,21 @@ class _LoginScreenState extends State<LoginScreen> {
       _showFeedback('Welcome back, $userName!');
 
       // Sincronizar rol del usuario en el estado global (UserSessionService)
-      // 1. Obtiene ID del usuario autenticado
-      // 2. Consulta la tabla 'profiles' para obtener 'role'
-      // 3. Almacena el rol en el estado global (ChangeNotifier) con manejo de errores
       final role = await UserSessionService.instance.syncUserRole();
 
       if (!mounted) return;
 
-      // 4. Si el usuario es role: admin navega a AdminDashboardScreen; si no, a HomeScreen
-      if (role == UserRole.admin) {
+      // Redirección según rol:
+      // Si el rol es instructor O el correo es de instructor, abrir InstructorHomeScreen
+      if (role == UserRole.instructor || isInstructorEmail) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => InstructorHomeScreen(
+              instructorName: UserSessionService.instance.displayName,
+            ),
+          ),
+        );
+      } else if (role == UserRole.admin) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => AdminDashboardScreen(
@@ -146,6 +233,26 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } on AuthException catch (e) {
+      // Fallback para usuarios demo de prueba
+      if (isInstructorEmail) {
+        final instructorName = emailLower.contains('sarah')
+            ? 'Sarah Jenkins'
+            : (emailLower.contains('carlos') ? 'Carlos Vega' : 'Alex Johnson');
+        UserSessionService.instance.setManualSession(
+          name: instructorName,
+          role: UserRole.instructor,
+          email: email,
+        );
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => InstructorHomeScreen(
+              instructorName: instructorName,
+            ),
+          ),
+        );
+        return;
+      }
       _showFeedback(e.message, isError: true);
     } catch (e) {
       _showFeedback('Error: $e', isError: true);

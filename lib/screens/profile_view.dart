@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/user_session_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/avatar_image_helper.dart';
 import 'my_reservations_screen.dart';
 import 'personal_information_screen.dart';
 
@@ -326,20 +327,22 @@ class _ProfileViewState extends State<ProfileView> {
             ),
             child: Padding(
               padding: const EdgeInsets.all(4),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(56),
-                child: Image.network(
+              child: CircleAvatar(
+                radius: 54,
+                backgroundColor: const Color(0xFF161C26),
+                backgroundImage: AvatarImageHelper.getAvatarImageProvider(
                   _currentAvatarUrl ?? _presetAvatars[0],
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: const Color(0xFF161C26),
-                    child: const Icon(
-                      Icons.person_rounded,
-                      color: Color(0xFF00A3E0),
-                      size: 48,
-                    ),
-                  ),
                 ),
+                child: AvatarImageHelper.getAvatarImageProvider(
+                          _currentAvatarUrl ?? _presetAvatars[0],
+                        ) ==
+                        null
+                    ? const Icon(
+                        Icons.person_rounded,
+                        color: Color(0xFF00A3E0),
+                        size: 48,
+                      )
+                    : null,
               ),
             ),
           ),
@@ -843,42 +846,73 @@ class _ProfileViewState extends State<ProfileView> {
 
               // Vista previa actual
               Center(
-                child: Stack(
-                  children: [
-                    Container(
-                      width: 86,
-                      height: 86,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFF00A3E0),
-                          width: 2,
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(43),
-                        child: Image.network(
-                          tempSelected,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                color: const Color(0xFF1E293B),
-                                child: const Icon(
-                                  Icons.person,
-                                  color: Colors.white,
-                                  size: 36,
-                                ),
-                              ),
-                        ),
-                      ),
+                child: Container(
+                  width: 86,
+                  height: 86,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFF00A3E0),
+                      width: 2.2,
                     ),
-                  ],
+                  ),
+                  child: CircleAvatar(
+                    radius: 41,
+                    backgroundColor: const Color(0xFF1E293B),
+                    backgroundImage: AvatarImageHelper.getAvatarImageProvider(tempSelected),
+                    child: AvatarImageHelper.getAvatarImageProvider(tempSelected) == null
+                        ? const Icon(Icons.person, color: Colors.white, size: 36)
+                        : null,
+                  ),
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+
+              // Botón para elegir desde galería
+              GestureDetector(
+                onTap: () async {
+                  final picked = await AvatarImageHelper.pickFromGallery();
+                  if (picked != null && picked.isNotEmpty) {
+                    setModalState(() {
+                      tempSelected = picked;
+                      urlController.clear();
+                    });
+                  }
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00BCEB).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0xFF00BCEB).withValues(alpha: 0.4),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.photo_library_rounded, color: Color(0xFF00BCEB), size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Elegir de la Galería del Dispositivo',
+                        style: AppTypography.style(
+                          color: const Color(0xFF00BCEB),
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 18),
               Text(
-                'Avatares Deportivos Recomendados:',
+                'O selecciona un Avatar Deportivo:',
                 style: AppTypography.style(
                   color: Colors.white,
                   fontSize: 13,

@@ -8,6 +8,7 @@ import 'theme/app_theme.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
+import 'screens/instructor_home_screen.dart';
 import 'screens/create_edit_class_screen.dart';
 import 'screens/my_reservations_screen.dart';
 
@@ -48,7 +49,9 @@ class IronPulseApp extends StatelessWidget {
     final Widget initialHome = isLoggedIn
         ? (UserSessionService.instance.isAdmin
             ? const AdminDashboardScreen()
-            : const HomeScreen())
+            : (UserSessionService.instance.isInstructor
+                ? const InstructorHomeScreen()
+                : const HomeScreen()))
         : const AuthScreen();
 
     return MaterialApp(
@@ -60,6 +63,7 @@ class IronPulseApp extends StatelessWidget {
         '/auth': (context) => const AuthScreen(),
         '/home': (context) => const HomeScreen(),
         '/admin': (context) => const AdminDashboardScreen(),
+        '/instructor-home': (context) => const InstructorHomeScreen(),
         '/create-class': (context) => const CreateEditClassScreen.create(),
         '/bookings': (context) => const MyReservationsScreen(),
       },

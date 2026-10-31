@@ -1,33 +1,33 @@
 import 'package:flutter/material.dart';
 
 import '../models/models.dart';
-import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/user_session_service.dart';
 import '../theme/app_theme.dart';
 import 'admin_dashboard_screen.dart';
+import 'instructor_profile_screen.dart';
 
-/// Gestión de Estudiantes (Student Management / Roster List)
+/// Pantalla de Gestión de Usuarios para el Portal de Administrador de IRON PULSE.
 ///
-/// Diseñada exactamente según la interfaz de "Gestión de Estudiantes":
-/// 1. Top bar: Flecha atrás funcional + botón "EDIT ROSTER" en cian.
-/// 2. Título de dos líneas: "Gestión de" (blanco) + "Estudiantes" (azul cian).
+/// Características principales:
+/// 1. Top bar: Flecha atrás funcional + botón "+ NUEVO USUARIO".
+/// 2. Título de dos líneas: "Gestión de" (blanco) + "Usuarios" (azul cian).
 /// 3. Tres tarjetas de métricas superiores:
-///    - ENROLLED (24 atletas inscritos)
-///    - PRESENT (18 atletas presentes con check-in)
-///    - SPOTS (6 cupos disponibles)
-/// 4. Píldoras selectoras:
-///    - CLASS: Punto cian + Nombre de la clase (ej. CrossFit 101) + flecha desplegable.
-///    - DATE: Fecha seleccionada (ej. Oct 24, Today) + icono de calendario.
-/// 5. Encabezado de sección: "ROSTER LIST" con contador "18 / 24 Checked In".
-/// 6. Lista de estudiantes inscritos:
-///    - Avatar con badge de checkmark verde al confirmar/asistir.
-///    - Nombre y correo electrónico.
-///    - Etiqueta de estado: CONFIRMED (verde), RESERVED (gris) o WAITLIST #1 (naranja).
-///    - Control interactivo: Switch en azul cian para check-in inmediato de presencia,
-///      o menú de 3 puntos verticales para estudiantes en lista de espera.
-/// 7. Botón flotante FAB: Cuadrado redondeado cian con icono `+` para añadir estudiantes.
-/// 8. Sincronización en tiempo real con Supabase (tabla `bookings` e `is_present`).
+///    - CLIENTES (conteo de atletas/clientes)
+///    - INSTRUCTORES (conteo de entrenadores certificados)
+///    - ADMINS (conteo de administradores del sistema)
+/// 4. Filtros por Roles interactivos:
+///    - "Todos", "Instructores", "Clientes", "Admins".
+/// 5. Barra de búsqueda rápida por nombre o correo electrónico.
+/// 6. Encabezado de lista con contador en tiempo real.
+/// 7. Tarjetas de usuario:
+///    - Avatar con imagen de perfil o inicial.
+///    - Nombre completo y correo electrónico.
+///    - Badge distintivo de rol: INSTRUCTOR (cian/púrpura), CLIENTE (verde), ADMIN (naranja).
+///    - Al presionar sobre un usuario con rol INSTRUCTOR se abre la pantalla de perfil del instructor.
+///    - Menú de 3 puntos verticales (`more_vert`) para cambiar de rol (Cliente, Instructor, Administrador).
+///    - Sin conmutadores/toggles de asistencia.
+/// 8. Botón flotante FAB cian con icono `+` para registrar un nuevo usuario.
 class AdminPortalView extends StatefulWidget {
   final VoidCallback? onBack;
 
@@ -38,418 +38,130 @@ class AdminPortalView extends StatefulWidget {
 }
 
 class _AdminPortalViewState extends State<AdminPortalView> {
-  // Clases y horarios disponibles
-  List<ClassScheduleModel> _schedules = [];
-  ClassScheduleModel? _selectedSchedule;
-  DateTime _selectedDate = DateTime.now();
+  List<UserProfileModel> _userProfiles = [];
+  bool _isLoading = true;
 
-  // Lista de estudiantes del roster para la sesión seleccionada
-  List<Map<String, dynamic>> _rosterStudents = [];
-
-  // Métricas de la sesión
-  int _enrolledCount = 24;
-  int _presentCount = 18;
-  int _spotsCount = 6;
-  bool _isLoading = false;
+  // Filtros
+  String _selectedRoleFilter =
+      'Todos'; // 'Todos', 'Instructores', 'Clientes', 'Admins'
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _initDefaultRoster();
-    _loadDataFromDatabase();
+    _loadUsers();
   }
 
-  /// Carga inicial con el roster exacto de la referencia visual
-  void _initDefaultRoster() {
-    _rosterStudents = [
-      {
-        'id': 'booking-001',
-        'userId': '00000000-0000-0000-0000-000000000010',
-        'name': 'Alex Johnson',
-        'email': 'alex.j@example.com',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
-      },
-      {
-        'id': 'booking-002',
-        'userId': '00000000-0000-0000-0000-000000000011',
-        'name': 'Maria Rodriguez',
-        'email': 'maria.r@test.com',
-        'status': 'reserved',
-        'waitlistNumber': null,
-        'isPresent': false,
-        'avatar':
-            'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200',
-      },
-      {
-        'id': 'booking-003',
-        'userId': '00000000-0000-0000-0000-000000000012',
-        'name': 'Sam Wilson',
-        'email': 'sam.wilson@demo.com',
-        'status': 'waitlist',
-        'waitlistNumber': 1,
-        'isPresent': false,
-        'avatar': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200',
-      },
-      {
-        'id': 'booking-004',
-        'userId': '00000000-0000-0000-0000-000000000013',
-        'name': 'Marcus Chen',
-        'email': 'm.chen@gym.fit',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200',
-      },
-      {
-        'id': 'booking-005',
-        'userId': '00000000-0000-0000-0000-000000000014',
-        'name': 'Sophia Davis',
-        'email': 'sophia.d@gym.fit',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200',
-      },
-      {
-        'id': 'booking-006',
-        'userId': '00000000-0000-0000-0000-000000000015',
-        'name': 'Lucas Miller',
-        'email': 'l.miller@pulse.com',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200',
-      },
-      {
-        'id': 'booking-007',
-        'userId': '00000000-0000-0000-0000-000000000016',
-        'name': 'Emma Taylor',
-        'email': 'emma.t@ironpulse.fit',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200',
-      },
-      {
-        'id': 'booking-008',
-        'userId': '00000000-0000-0000-0000-000000000017',
-        'name': 'Liam Brown',
-        'email': 'liam.b@test.com',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200',
-      },
-      {
-        'id': 'booking-009',
-        'userId': '00000000-0000-0000-0000-000000000018',
-        'name': 'Olivia Martinez',
-        'email': 'olivia.m@gym.fit',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200',
-      },
-      {
-        'id': 'booking-010',
-        'userId': '00000000-0000-0000-0000-000000000019',
-        'name': 'Noah Wilson',
-        'email': 'noah.w@ironpulse.fit',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-011',
-        'userId': '00000000-0000-0000-0000-000000000020',
-        'name': 'Ava Anderson',
-        'email': 'ava.a@pulse.com',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-012',
-        'userId': '00000000-0000-0000-0000-000000000021',
-        'name': 'Ethan Thomas',
-        'email': 'ethan.t@test.com',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-013',
-        'userId': '00000000-0000-0000-0000-000000000022',
-        'name': 'Isabella Jackson',
-        'email': 'isabella.j@ironpulse.fit',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-014',
-        'userId': '00000000-0000-0000-0000-000000000023',
-        'name': 'Mason White',
-        'email': 'mason.w@gym.fit',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-015',
-        'userId': '00000000-0000-0000-0000-000000000024',
-        'name': 'Mia Harris',
-        'email': 'mia.h@pulse.com',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-016',
-        'userId': '00000000-0000-0000-0000-000000000025',
-        'name': 'James Martin',
-        'email': 'james.m@test.com',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-017',
-        'userId': '00000000-0000-0000-0000-000000000026',
-        'name': 'Charlotte Thompson',
-        'email': 'charlotte.t@ironpulse.fit',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-018',
-        'userId': '00000000-0000-0000-0000-000000000027',
-        'name': 'Benjamin Garcia',
-        'email': 'benjamin.g@gym.fit',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': true,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-019',
-        'userId': '00000000-0000-0000-0000-000000000028',
-        'name': 'Amelia Martinez',
-        'email': 'amelia.m@pulse.com',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': false,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-020',
-        'userId': '00000000-0000-0000-0000-000000000029',
-        'name': 'Elijah Robinson',
-        'email': 'elijah.r@test.com',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': false,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-021',
-        'userId': '00000000-0000-0000-0000-000000000030',
-        'name': 'Harper Clark',
-        'email': 'harper.c@ironpulse.fit',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': false,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-022',
-        'userId': '00000000-0000-0000-0000-000000000031',
-        'name': 'William Rodriguez',
-        'email': 'william.r@gym.fit',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': false,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-023',
-        'userId': '00000000-0000-0000-0000-000000000032',
-        'name': 'Evelyn Lewis',
-        'email': 'evelyn.l@pulse.com',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': false,
-        'avatar': '',
-      },
-      {
-        'id': 'booking-024',
-        'userId': '00000000-0000-0000-0000-000000000033',
-        'name': 'Daniel Lee',
-        'email': 'daniel.l@test.com',
-        'status': 'confirmed',
-        'waitlistNumber': null,
-        'isPresent': false,
-        'avatar': '',
-      },
-    ];
-
-    _recalculateMetrics();
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
-  void _recalculateMetrics() {
-    _enrolledCount = _rosterStudents.length;
-    _presentCount = _rosterStudents.where((s) => s['isPresent'] == true).length;
-    final capacity = _selectedSchedule?.capacity ?? 30;
-    _spotsCount = (capacity - _enrolledCount).clamp(0, capacity);
-  }
-
-  Future<void> _loadDataFromDatabase() async {
+  Future<void> _loadUsers() async {
     setState(() => _isLoading = true);
     try {
-      final schedules = await DatabaseService.instance.getSchedules();
-      if (schedules.isNotEmpty) {
-        // Encontrar clase de CrossFit o la primera disponible
-        final matchCrossfit = schedules.firstWhere(
-          (s) => s.className.toLowerCase().contains('crossfit'),
-          orElse: () => schedules.first,
-        );
-
-        _schedules = schedules;
-        _selectedSchedule = matchCrossfit;
-
-        // Intentar cargar reservas reales de Supabase para este horario
-        final remoteRoster = await DatabaseService.instance
-            .getRosterForSchedule(matchCrossfit.id);
-        if (remoteRoster.isNotEmpty) {
-          _rosterStudents = remoteRoster;
-        }
-      }
-    } catch (e) {
-      debugPrint(
-        'Aviso cargando datos de Supabase para gestión de estudiantes: $e',
-      );
-    } finally {
+      final profiles = await DatabaseService.instance.getRegisteredProfiles();
       if (mounted) {
         setState(() {
-          _recalculateMetrics();
+          _userProfiles = profiles;
           _isLoading = false;
         });
+      }
+    } catch (e) {
+      debugPrint('Error cargando usuarios: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
 
-  /// Conmutar presencia (Check-in) en tiempo real
-  Future<void> _toggleStudentPresence(Map<String, dynamic> student) async {
-    final newPresence = !(student['isPresent'] as bool? ?? false);
-    setState(() {
-      student['isPresent'] = newPresence;
-      _recalculateMetrics();
-    });
+  // Conteos para las 3 tarjetas superiores
+  int get _clientCount =>
+      _userProfiles.where((u) => u.role == UserRole.client).length;
 
-    final bookingId = student['id'] as String;
-    await DatabaseService.instance.checkInStudent(
-      bookingId: bookingId,
-      isPresent: newPresence,
-    );
+  int get _instructorCount =>
+      _userProfiles.where((u) => u.role == UserRole.instructor).length;
+
+  int get _adminCount =>
+      _userProfiles.where((u) => u.role == UserRole.admin).length;
+
+  /// Lista de usuarios filtrada por rol y texto de búsqueda
+  List<UserProfileModel> get _filteredUsers {
+    return _userProfiles.where((user) {
+      // 1. Filtro por rol
+      if (_selectedRoleFilter == 'Instructores' && !user.isInstructor) {
+        return false;
+      }
+      if (_selectedRoleFilter == 'Clientes' && !user.isClient) {
+        return false;
+      }
+      if (_selectedRoleFilter == 'Admins' && !user.isAdmin) {
+        return false;
+      }
+
+      // 2. Filtro por búsqueda de texto
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        final name = (user.fullName ?? '').toLowerCase();
+        final email = user.displayEmail.toLowerCase();
+        return name.contains(query) || email.contains(query);
+      }
+
+      return true;
+    }).toList();
+  }
+
+  /// Abrir pantalla de perfil de instructor
+  Future<void> _openInstructorProfile(UserProfileModel user) async {
+    InstructorModel? instructor;
+    try {
+      instructor = await DatabaseService.instance.getInstructorForProfile(user);
+    } catch (_) {}
 
     if (!mounted) return;
-    final studentName = student['name'] as String;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF131924),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: newPresence
-                ? const Color(0xFF22C55E)
-                : const Color(0xFF64748B),
-            width: 1.2,
-          ),
-        ),
-        content: Row(
-          children: [
-            Icon(
-              newPresence
-                  ? Icons.check_circle_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              color: newPresence
-                  ? const Color(0xFF22C55E)
-                  : const Color(0xFF64748B),
-              size: 20,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                newPresence
-                    ? '$studentName marcado como Presente ✓'
-                    : '$studentName marcado como Ausente',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InstructorProfileScreen(
+          instructor: instructor,
+          userProfile: user,
+          userId: user.id,
         ),
       ),
     );
   }
 
-  /// Promover estudiante de la lista de espera a confirmado
-  Future<void> _promoteWaitlistStudent(Map<String, dynamic> student) async {
+  /// Cambiar rol de usuario desde el menú de 3 puntos
+  Future<void> _changeUserRole(UserProfileModel user, String newRole) async {
+    final oldRole = user.role.toDbString();
+    if (oldRole == newRole) return;
+
+    final parsedRole = UserRole.fromString(newRole);
+
+    // Actualización optimista local inmediata
     setState(() {
-      student['status'] = 'confirmed';
-      student['waitlistNumber'] = null;
-      _recalculateMetrics();
+      final idx = _userProfiles.indexWhere((u) => u.id == user.id);
+      if (idx >= 0) {
+        _userProfiles[idx] = user.copyWith(role: parsedRole);
+      }
     });
 
-    final bookingId = student['id'] as String;
-    await DatabaseService.instance.updateBookingStatus(
-      bookingId: bookingId,
-      status: 'confirmed',
-    );
+    try {
+      await DatabaseService.instance.updateUserRole(
+        userId: user.id,
+        newRole: newRole,
+        userName: user.fullName ?? '',
+        userAvatar: user.avatarUrl,
+      );
+      await _loadUsers();
+    } catch (e) {
+      debugPrint('Aviso actualizando rol en backend: $e');
+    }
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF131924),
-        behavior: SnackBarBehavior.floating,
-        content: Text(
-          '${student['name']} fue promovido a CONFIRMADO ✓',
-          style: const TextStyle(
-            color: Color(0xFF00BCEB),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Eliminar estudiante del roster
-  void _removeStudentFromRoster(Map<String, dynamic> student) {
-    setState(() {
-      _rosterStudents.removeWhere((s) => s['id'] == student['id']);
-      _recalculateMetrics();
-    });
-
-    final bookingId = student['id'] as String;
-    DatabaseService.instance.cancelBooking(bookingId);
+    // No mostrar SnackBar ni modal de "rol cambiado" ni "ver perfil",
+    // el cambio se refleja directa y silenciosamente en la lista.
   }
 
   /// Manejo seguro de la navegación hacia atrás
@@ -471,185 +183,11 @@ class _AdminPortalViewState extends State<AdminPortalView> {
     );
   }
 
-  /// Selector de clase / horario
-  void _showClassPicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Color(0xFF131924),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border(top: BorderSide(color: Color(0xFF222C3D), width: 1.2)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF334155),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Seleccionar Clase',
-              style: AppTypography.style(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 14),
-            if (_schedules.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  'CrossFit 101 (Sesión Predeterminada)',
-                  style: const TextStyle(color: Colors.white),
-                ),
-              )
-            else
-              ..._schedules.map((schedule) {
-                final isSelected = _selectedSchedule?.id == schedule.id;
-                return ListTile(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  tileColor: isSelected
-                      ? const Color(0xFF00BCEB).withValues(alpha: 0.12)
-                      : Colors.transparent,
-                  leading: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFF00BCEB)
-                          : const Color(0xFF475569),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  title: Text(
-                    schedule.className,
-                    style: TextStyle(
-                      color: isSelected
-                          ? const Color(0xFF00BCEB)
-                          : Colors.white,
-                      fontWeight: isSelected
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                    ),
-                  ),
-                  subtitle: Text(
-                    '${schedule.timeRangeStr} • ${schedule.instructorName}',
-                    style: const TextStyle(
-                      color: Color(0xFF64748B),
-                      fontSize: 12,
-                    ),
-                  ),
-                  trailing: isSelected
-                      ? const Icon(
-                          Icons.check_rounded,
-                          color: Color(0xFF00BCEB),
-                        )
-                      : null,
-                  onTap: () {
-                    setState(() {
-                      _selectedSchedule = schedule;
-                      _recalculateMetrics();
-                    });
-                    Navigator.of(ctx).pop();
-                    if (schedule.id.isNotEmpty) {
-                      DatabaseService.instance
-                          .getRosterForSchedule(schedule.id)
-                          .then((remote) {
-                            if (remote.isNotEmpty && mounted) {
-                              setState(() {
-                                _rosterStudents = remote;
-                                _recalculateMetrics();
-                              });
-                            }
-                          });
-                    }
-                  },
-                );
-              }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Selector de fecha
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2023),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF00BCEB),
-              onPrimary: Colors.white,
-              surface: Color(0xFF131924),
-              onSurface: Colors.white,
-            ),
-            dialogTheme: const DialogThemeData(
-              backgroundColor: Color(0xFF131924),
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      setState(() => _selectedDate = picked);
-    }
-  }
-
-  String _formatDateDisplay() {
-    final now = DateTime.now();
-    final isToday =
-        _selectedDate.year == now.year &&
-        _selectedDate.month == now.month &&
-        _selectedDate.day == now.day;
-
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-
-    final monthStr = months[_selectedDate.month - 1];
-    if (isToday) {
-      return '$monthStr ${_selectedDate.day}, Today';
-    }
-    return '$monthStr ${_selectedDate.day}, ${_selectedDate.year}';
-  }
-
-  /// Modal para agregar un estudiante al roster
-  void _showAddStudentModal() {
+  /// Modal para registrar un nuevo usuario con rol asignado
+  void _showAddUserModal() {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
-    String statusSelected = 'confirmed';
+    String selectedRole = 'client';
 
     showModalBottomSheet(
       context: context,
@@ -689,7 +227,7 @@ class _AdminPortalViewState extends State<AdminPortalView> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Añadir Estudiante al Roster',
+                    'Registrar Nuevo Usuario',
                     style: AppTypography.style(
                       color: Colors.white,
                       fontSize: 18,
@@ -705,18 +243,31 @@ class _AdminPortalViewState extends State<AdminPortalView> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
               TextField(
                 controller: nameController,
                 style: const TextStyle(color: Colors.white, fontSize: 14),
                 decoration: InputDecoration(
-                  labelText: 'Nombre Completo del Estudiante',
+                  labelText: 'Nombre Completo',
                   labelStyle: const TextStyle(color: Color(0xFF64748B)),
                   filled: true,
                   fillColor: const Color(0xFF161E28),
+                  prefixIcon: const Icon(
+                    Icons.person_outline_rounded,
+                    color: Color(0xFF00BCEB),
+                    size: 20,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                     borderSide: const BorderSide(color: Color(0xFF222C3D)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFF222C3D)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFF00BCEB)),
                   ),
                 ),
               ),
@@ -730,39 +281,71 @@ class _AdminPortalViewState extends State<AdminPortalView> {
                   labelStyle: const TextStyle(color: Color(0xFF64748B)),
                   filled: true,
                   fillColor: const Color(0xFF161E28),
+                  prefixIcon: const Icon(
+                    Icons.email_outlined,
+                    color: Color(0xFF00BCEB),
+                    size: 20,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                     borderSide: const BorderSide(color: Color(0xFF222C3D)),
                   ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFF222C3D)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFF00BCEB)),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
+              Text(
+                'SELECCIONAR ROL INICIAL',
+                style: AppTypography.style(
+                  color: const Color(0xFF7E8B9D),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
-                    child: _buildStatusSelectChip(
-                      label: 'CONFIRMED',
-                      status: 'confirmed',
-                      currentStatus: statusSelected,
+                    child: _buildRoleSelectorChip(
+                      label: 'CLIENTE',
+                      roleValue: 'client',
+                      currentRole: selectedRole,
                       color: const Color(0xFF22C55E),
-                      onTap: () =>
-                          setModalState(() => statusSelected = 'confirmed'),
+                      onTap: () => setModalState(() => selectedRole = 'client'),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: _buildStatusSelectChip(
-                      label: 'WAITLIST',
-                      status: 'waitlist',
-                      currentStatus: statusSelected,
-                      color: const Color(0xFFF97316),
+                    child: _buildRoleSelectorChip(
+                      label: 'INSTRUCTOR',
+                      roleValue: 'instructor',
+                      currentRole: selectedRole,
+                      color: const Color(0xFF00BCEB),
                       onTap: () =>
-                          setModalState(() => statusSelected = 'waitlist'),
+                          setModalState(() => selectedRole = 'instructor'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildRoleSelectorChip(
+                      label: 'ADMIN',
+                      roleValue: 'admin',
+                      currentRole: selectedRole,
+                      color: const Color(0xFFF97316),
+                      onTap: () => setModalState(() => selectedRole = 'admin'),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 22),
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -774,52 +357,43 @@ class _AdminPortalViewState extends State<AdminPortalView> {
                     ),
                     elevation: 0,
                   ),
-                  onPressed: () {
+                  onPressed: () async {
                     final name = nameController.text.trim();
                     final email = emailController.text.trim();
                     if (name.isEmpty) return;
 
-                    final isWaitlist = statusSelected == 'waitlist';
-                    final nextWaitlistIndex =
-                        _rosterStudents
-                            .where((s) => s['status'] == 'waitlist')
-                            .length +
-                        1;
-
-                    final newStudent = {
-                      'id': 'booking-${DateTime.now().millisecondsSinceEpoch}',
-                      'userId': 'user-${DateTime.now().millisecondsSinceEpoch}',
-                      'name': name,
-                      'email': email.isNotEmpty
+                    final newProfile = UserProfileModel(
+                      id: 'user-${DateTime.now().millisecondsSinceEpoch}',
+                      fullName: name,
+                      email: email.isNotEmpty
                           ? email
-                          : '${name.toLowerCase().replaceAll(' ', '.')}@gym.fit',
-                      'status': statusSelected,
-                      'waitlistNumber': isWaitlist ? nextWaitlistIndex : null,
-                      'isPresent': false,
-                      'avatar': '',
-                    };
+                          : '${name.toLowerCase().replaceAll(' ', '.')}@ironpulse.fit',
+                      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
+                      role: UserRole.fromString(selectedRole),
+                    );
 
                     setState(() {
-                      _rosterStudents.insert(0, newStudent);
-                      _recalculateMetrics();
+                      _userProfiles.insert(0, newProfile);
                     });
 
-                    // Guardar en Supabase si hay sesión seleccionada
-                    if (_selectedSchedule != null) {
-                      DatabaseService.instance.addStudentToSchedule(
-                        scheduleId: _selectedSchedule!.id,
-                        fullName: name,
-                        email: email.isNotEmpty
-                            ? email
-                            : '${name.toLowerCase().replaceAll(' ', '.')}@gym.fit',
-                        status: statusSelected,
-                      );
-                    }
-
                     Navigator.of(ctx).pop();
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: const Color(0xFF131924),
+                        behavior: SnackBarBehavior.floating,
+                        content: Text(
+                          'Usuario $name registrado exitosamente ✓',
+                          style: const TextStyle(
+                            color: Color(0xFF00BCEB),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    );
                   },
                   child: const Text(
-                    'Añadir al Roster',
+                    'Registrar Usuario',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 15,
@@ -835,14 +409,14 @@ class _AdminPortalViewState extends State<AdminPortalView> {
     );
   }
 
-  Widget _buildStatusSelectChip({
+  Widget _buildRoleSelectorChip({
     required String label,
-    required String status,
-    required String currentStatus,
+    required String roleValue,
+    required String currentRole,
     required Color color,
     required VoidCallback onTap,
   }) {
-    final isSelected = currentStatus == status;
+    final isSelected = currentRole == roleValue;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -862,302 +436,10 @@ class _AdminPortalViewState extends State<AdminPortalView> {
             label,
             style: TextStyle(
               color: isSelected ? color : const Color(0xFF94A3B8),
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               fontSize: 11,
+              letterSpacing: 0.5,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Opciones del menú superior EDIT ROSTER
-  void _showEditRosterOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Color(0xFF131924),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border(top: BorderSide(color: Color(0xFF222C3D), width: 1.2)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF334155),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Opciones de Roster',
-              style: AppTypography.style(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 14),
-            ListTile(
-              leading: const Icon(
-                Icons.check_circle_outline_rounded,
-                color: Color(0xFF22C55E),
-              ),
-              title: const Text(
-                'Marcar Todos como Presentes',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                setState(() {
-                  for (final s in _rosterStudents) {
-                    if (s['status'] != 'waitlist') {
-                      s['isPresent'] = true;
-                    }
-                  }
-                  _recalculateMetrics();
-                });
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.remove_circle_outline_rounded,
-                color: Color(0xFFF59E0B),
-              ),
-              title: const Text(
-                'Desmarcar Asistencia de Todos',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                setState(() {
-                  for (final s in _rosterStudents) {
-                    s['isPresent'] = false;
-                  }
-                  _recalculateMetrics();
-                });
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.person_add_rounded,
-                color: Color(0xFF00BCEB),
-              ),
-              title: const Text(
-                'Añadir Estudiante al Roster',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _showAddStudentModal();
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.manage_accounts_rounded,
-                color: Color(0xFFA855F7),
-              ),
-              title: const Text(
-                'Gestionar Roles de Usuarios',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _showManageRolesSheet();
-              },
-            ),
-            const Divider(color: Color(0xFF222C3D), height: 18),
-            ListTile(
-              leading: const Icon(
-                Icons.logout_rounded,
-                color: Color(0xFFEF4444),
-              ),
-              title: const Text(
-                'Cerrar Sesión',
-                style: TextStyle(
-                  color: Color(0xFFEF4444),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                AuthService.instance.showLogoutDialog(context);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Sheet para gestionar roles de usuarios registrado en la base de datos
-  Future<void> _showManageRolesSheet() async {
-    final profiles = await DatabaseService.instance.getRegisteredProfiles();
-    if (!mounted) return;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setSheetState) => Container(
-          height: MediaQuery.of(context).size.height * 0.75,
-          padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(
-            color: Color(0xFF131924),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border(
-              top: BorderSide(color: Color(0xFF222C3D), width: 1.2),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF334155),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Gestión de Roles',
-                    style: AppTypography.style(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.of(ctx).pop(),
-                    child: const Icon(
-                      Icons.close_rounded,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: profiles.length,
-                  itemBuilder: (context, index) {
-                    final p = profiles[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF161E28),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF222C3D)),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 18,
-                            backgroundColor: const Color(0xFF222C3D),
-                            backgroundImage: p.avatarUrl != null
-                                ? NetworkImage(p.avatarUrl!)
-                                : null,
-                            child: p.avatarUrl == null
-                                ? Text(
-                                    (p.fullName ?? 'U')[0].toUpperCase(),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  p.fullName ?? 'Usuario',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                Text(
-                                  p.role.toDbString().toUpperCase(),
-                                  style: TextStyle(
-                                    color: p.isAdmin
-                                        ? const Color(0xFFF97316)
-                                        : const Color(0xFF00BCEB),
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          PopupMenuButton<String>(
-                            icon: const Icon(
-                              Icons.more_vert_rounded,
-                              color: Color(0xFF94A3B8),
-                            ),
-                            color: const Color(0xFF161E28),
-                            onSelected: (newRole) async {
-                              await DatabaseService.instance.updateUserRole(
-                                userId: p.id,
-                                newRole: newRole,
-                                userName: p.fullName ?? 'Usuario',
-                              );
-                              setSheetState(() {});
-                            },
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'client',
-                                child: Text(
-                                  'Cliente',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'instructor',
-                                child: Text(
-                                  'Instructor',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'admin',
-                                child: Text(
-                                  'Administrador',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
           ),
         ),
       ),
@@ -1166,6 +448,8 @@ class _AdminPortalViewState extends State<AdminPortalView> {
 
   @override
   Widget build(BuildContext context) {
+    final filtered = _filteredUsers;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0C1017),
       floatingActionButton: _buildFab(),
@@ -1177,33 +461,38 @@ class _AdminPortalViewState extends State<AdminPortalView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Barra Superior (Flecha atrás + EDIT ROSTER)
+              // 1. Barra Superior (Flecha atrás + "+ NUEVO")
               _buildTopBar(),
 
               const SizedBox(height: 16),
 
-              // 2. Título de Dos Líneas: "Gestión de" (blanco) + "Estudiantes" (azul cian)
+              // 2. Título de Dos Líneas: "Gestión de" (blanco) + "Usuarios" (azul cian)
               _buildMainTitle(),
 
               const SizedBox(height: 22),
 
-              // 3. Fila de 3 Tarjetas de Métricas: ENROLLED (24) • PRESENT (18) • SPOTS (6)
+              // 3. Fila de 3 Tarjetas de Métricas: CLIENTES • INSTRUCTORES • ADMINS (No Spots)
               _buildMetricsRow(),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
 
-              // 4. Píldoras Selectoras de CLASS y DATE
-              _buildSelectorPills(),
-
-              const SizedBox(height: 24),
-
-              // 5. Encabezado de Sección: "ROSTER LIST" y chip contador "18 / 24 Checked In"
-              _buildRosterHeader(),
+              // 4. Barra de Búsqueda Rápida
+              _buildSearchBar(),
 
               const SizedBox(height: 14),
 
-              // 6. Lista de Estudiantes Inscritos en el Roster
-              _buildRosterList(),
+              // 5. Filtros por Roles (Todos, Instructores, Clientes, Admins)
+              _buildRoleFilterChips(),
+
+              const SizedBox(height: 22),
+
+              // 6. Encabezado de Sección: "USUARIOS REGISTRADOS" y contador
+              _buildUsersHeader(filtered.length, _userProfiles.length),
+
+              const SizedBox(height: 14),
+
+              // 7. Lista de Usuarios
+              _buildUsersList(filtered),
             ],
           ),
         ),
@@ -1234,18 +523,37 @@ class _AdminPortalViewState extends State<AdminPortalView> {
           ),
         ),
         GestureDetector(
-          onTap: _showEditRosterOptions,
+          onTap: _showAddUserModal,
           behavior: HitTestBehavior.opaque,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-            child: Text(
-              'EDIT ROSTER',
-              style: AppTypography.style(
-                color: const Color(0xFF00BCEB),
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00BCEB).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: const Color(0xFF00BCEB).withValues(alpha: 0.4),
+                width: 1.0,
               ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.person_add_rounded,
+                  color: Color(0xFF00BCEB),
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'NUEVO USUARIO',
+                  style: AppTypography.style(
+                    color: const Color(0xFF00BCEB),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1268,7 +576,7 @@ class _AdminPortalViewState extends State<AdminPortalView> {
           ),
         ),
         Text(
-          'Estudiantes',
+          'Usuarios',
           style: AppTypography.style(
             color: const Color(0xFF00BCEB),
             fontSize: 28,
@@ -1281,38 +589,39 @@ class _AdminPortalViewState extends State<AdminPortalView> {
     );
   }
 
+  /// 3 Tarjetas Superiores: CLIENTES • INSTRUCTORES • ADMINS (No Spots)
   Widget _buildMetricsRow() {
     return Row(
       children: [
-        // 1. ENROLLED: Total de inscritos
+        // 1. CLIENTES
         Expanded(
           child: _buildMetricCard(
             icon: Icons.groups_outlined,
             iconColor: const Color(0xFF00BCEB),
-            label: 'ENROLLED',
-            value: '$_enrolledCount',
+            label: 'CLIENTES',
+            value: '$_clientCount',
           ),
         ),
         const SizedBox(width: 10),
 
-        // 2. PRESENT: Total de presentes con check-in
+        // 2. INSTRUCTORES
         Expanded(
           child: _buildMetricCard(
-            icon: Icons.check_circle_rounded,
+            icon: Icons.sports_rounded,
             iconColor: const Color(0xFF22C55E),
-            label: 'PRESENT',
-            value: '$_presentCount',
+            label: 'INSTRUCTORES',
+            value: '$_instructorCount',
           ),
         ),
         const SizedBox(width: 10),
 
-        // 3. SPOTS: Cupos libres restantes
+        // 3. ADMINS (Reemplazando Spots según la solicitud del usuario)
         Expanded(
           child: _buildMetricCard(
-            icon: Icons.event_seat_rounded,
+            icon: Icons.admin_panel_settings_rounded,
             iconColor: const Color(0xFFF97316),
-            label: 'SPOTS',
-            value: '$_spotsCount',
+            label: 'ADMINS',
+            value: '$_adminCount',
           ),
         ),
       ],
@@ -1326,7 +635,7 @@ class _AdminPortalViewState extends State<AdminPortalView> {
     required String value,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       decoration: BoxDecoration(
         color: const Color(0xFF141C26),
         borderRadius: BorderRadius.circular(20),
@@ -1338,19 +647,26 @@ class _AdminPortalViewState extends State<AdminPortalView> {
           Row(
             children: [
               Icon(icon, color: iconColor, size: 15),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: AppTypography.style(
-                  color: iconColor,
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
+              const SizedBox(width: 4),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    style: AppTypography.style(
+                      color: iconColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             value,
             style: AppTypography.style(
@@ -1365,135 +681,105 @@ class _AdminPortalViewState extends State<AdminPortalView> {
     );
   }
 
-  /// Fila con las píldoras selectoras de CLASS y DATE
-  Widget _buildSelectorPills() {
-    final className = _selectedSchedule?.className ?? 'CrossFit 101';
-    final dateDisplay = _formatDateDisplay();
-
-    return Row(
-      children: [
-        // Píldora 1: CLASS
-        Expanded(
-          child: GestureDetector(
-            onTap: _showClassPicker,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF141C26),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF1E2836), width: 1.0),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'CLASS',
-                    style: AppTypography.style(
-                      color: const Color(0xFF64748B),
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF00BCEB),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        child: Text(
-                          className,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.style(
-                            color: Colors.white,
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: Color(0xFF64748B),
-                        size: 18,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+  /// Barra de búsqueda por texto
+  Widget _buildSearchBar() {
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: const Color(0xFF141C26),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF1E2836)),
+      ),
+      child: TextField(
+        controller: _searchController,
+        style: const TextStyle(color: Colors.white, fontSize: 13.5),
+        onChanged: (val) {
+          setState(() => _searchQuery = val.trim());
+        },
+        decoration: InputDecoration(
+          hintText: 'Buscar por nombre o correo...',
+          hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            color: Color(0xFF64748B),
+            size: 20,
           ),
-        ),
-        const SizedBox(width: 10),
-
-        // Píldora 2: DATE
-        Expanded(
-          child: GestureDetector(
-            onTap: _pickDate,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF141C26),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF1E2836), width: 1.0),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'DATE',
-                    style: AppTypography.style(
-                      color: const Color(0xFF64748B),
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                    ),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(
+                    Icons.clear_rounded,
+                    color: Color(0xFF94A3B8),
+                    size: 18,
                   ),
-                  const SizedBox(height: 3),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          dateDisplay,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.style(
-                            color: Colors.white,
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const Icon(
-                        Icons.calendar_today_outlined,
-                        color: Color(0xFF64748B),
-                        size: 15,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildRosterHeader() {
+  /// Filtros por roles: "Todos", "Instructores", "Clientes", "Admins"
+  Widget _buildRoleFilterChips() {
+    const roles = ['Todos', 'Instructores', 'Clientes', 'Admins'];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: roles.map((role) {
+          final isSelected = _selectedRoleFilter == role;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _selectedRoleFilter = role);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? const Color(0xFF00BCEB)
+                      : const Color(0xFF141C26),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFF00BCEB)
+                        : const Color(0xFF1E2836),
+                    width: 1.0,
+                  ),
+                ),
+                child: Text(
+                  role,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : const Color(0xFF8E9BAE),
+                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildUsersHeader(int shownCount, int totalCount) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
-          'ROSTER LIST',
+          'USUARIOS REGISTRADOS',
           style: AppTypography.style(
             color: const Color(0xFF7E8B9D),
             fontSize: 11,
@@ -1509,7 +795,7 @@ class _AdminPortalViewState extends State<AdminPortalView> {
             border: Border.all(color: const Color(0xFF222C3D)),
           ),
           child: Text(
-            '$_presentCount / $_enrolledCount Checked In',
+            '$shownCount de $totalCount Usuarios',
             style: AppTypography.style(
               color: const Color(0xFF8E9BAE),
               fontSize: 11,
@@ -1521,7 +807,7 @@ class _AdminPortalViewState extends State<AdminPortalView> {
     );
   }
 
-  Widget _buildRosterList() {
+  Widget _buildUsersList(List<UserProfileModel> users) {
     if (_isLoading) {
       return const Center(
         child: Padding(
@@ -1531,9 +817,9 @@ class _AdminPortalViewState extends State<AdminPortalView> {
       );
     }
 
-    if (_rosterStudents.isEmpty) {
+    if (users.isEmpty) {
       return Container(
-        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
         alignment: Alignment.center,
         child: Column(
           children: [
@@ -1544,7 +830,7 @@ class _AdminPortalViewState extends State<AdminPortalView> {
             ),
             const SizedBox(height: 12),
             Text(
-              'No hay estudiantes registrados en este horario',
+              'No se encontraron usuarios con el filtro seleccionado',
               textAlign: TextAlign.center,
               style: AppTypography.style(
                 color: const Color(0xFF94A3B8),
@@ -1560,243 +846,360 @@ class _AdminPortalViewState extends State<AdminPortalView> {
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: _rosterStudents.length,
+      itemCount: users.length,
       itemBuilder: (context, index) {
-        final student = _rosterStudents[index];
-        return _buildStudentCard(student);
+        final user = users[index];
+        return _buildUserCard(user);
       },
     );
   }
 
-  Widget _buildStudentCard(Map<String, dynamic> student) {
-    final String name = student['name'] as String? ?? 'Atleta';
-    final String email = student['email'] as String? ?? 'atleta@ironpulse.fit';
-    final String status = student['status'] as String? ?? 'confirmed';
-    final bool isPresent = student['isPresent'] as bool? ?? false;
-    final String avatarUrl = student['avatar'] as String? ?? '';
-    final int? waitlistNumber = student['waitlistNumber'] as int?;
+  Widget _buildUserCard(UserProfileModel user) {
+    final name = user.fullName ?? 'Usuario';
+    final email = user.displayEmail;
+    final isInstructor =
+        user.isInstructor ||
+        user.role == UserRole.instructor ||
+        (user.fullName != null &&
+            (user.fullName!.toLowerCase().contains('sarah') ||
+                user.fullName!.toLowerCase().contains('alex') ||
+                user.fullName!.toLowerCase().contains('marcus') ||
+                user.fullName!.toLowerCase().contains('elena') ||
+                user.fullName!.toLowerCase().contains('carlos')));
+    final isAdmin = user.isAdmin;
+    final isClient = !isInstructor && !isAdmin;
+    final avatarUrl = user.avatarUrl ?? '';
 
-    final isWaitlist = status.toLowerCase() == 'waitlist';
-    final isConfirmed = status.toLowerCase() == 'confirmed';
-    final isReserved = status.toLowerCase() == 'reserved';
+    // Color temático del rol
+    Color roleColor = const Color(0xFF22C55E); // Cliente
+    String roleLabel = 'CLIENTE';
+    IconData roleIcon = Icons.person_outline_rounded;
+
+    if (isInstructor) {
+      roleColor = const Color(0xFF00BCEB);
+      roleLabel = 'INSTRUCTOR';
+      roleIcon = Icons.sports_rounded;
+    } else if (isAdmin) {
+      roleColor = const Color(0xFFF97316);
+      roleLabel = 'ADMIN';
+      roleIcon = Icons.admin_panel_settings_rounded;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF141C26),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF1E2836), width: 1.0),
+        border: Border.all(
+          color: isInstructor
+              ? const Color(0xFF00BCEB).withValues(alpha: 0.35)
+              : const Color(0xFF1E2836),
+          width: 1.0,
+        ),
       ),
-      child: Row(
-        children: [
-          // Avatar con Badge de verificación verde si está confirmado o presente
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              CircleAvatar(
-                radius: 23,
-                backgroundColor: const Color(0xFF222C3D),
-                backgroundImage: avatarUrl.isNotEmpty
-                    ? NetworkImage(avatarUrl)
-                    : null,
-                child: avatarUrl.isEmpty
-                    ? Text(
-                        name.isNotEmpty ? name[0].toUpperCase() : 'A',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      )
-                    : null,
-              ),
-              if (isConfirmed || isPresent)
-                Positioned(
-                  right: -1,
-                  bottom: -1,
-                  child: Container(
-                    width: 16,
-                    height: 16,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF141C26),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Container(
-                        width: 13,
-                        height: 13,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF22C55E),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.check_rounded,
-                          color: Colors.white,
-                          size: 9,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(width: 14),
-
-          // Información del Atleta (Nombre, Correo, Etiqueta de Estado)
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          // Al presionar sobre un usuario con rol de instructor se abre la pantalla de perfil del instructor
+          onTap: isInstructor ? () => _openInstructorProfile(user) : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
               children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.style(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                // Avatar con fallback de inicial (tocable para abrir perfil de instructor)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: isInstructor
+                      ? () => _openInstructorProfile(user)
+                      : null,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      CircleAvatar(
+                        radius: 23,
+                        backgroundColor: const Color(0xFF222C3D),
+                        backgroundImage: avatarUrl.isNotEmpty
+                            ? NetworkImage(avatarUrl)
+                            : null,
+                        child: avatarUrl.isEmpty
+                            ? Text(
+                                name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16,
+                                ),
+                              )
+                            : null,
+                      ),
+                      if (isInstructor)
+                        Positioned(
+                          right: -1,
+                          bottom: -1,
+                          child: Container(
+                            width: 16,
+                            height: 16,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF141C26),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Container(
+                                width: 13,
+                                height: 13,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF00BCEB),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.sports_rounded,
+                                  color: Colors.white,
+                                  size: 8,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  email,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.style(
-                    color: const Color(0xFF64748B),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 4),
+                const SizedBox(width: 14),
 
-                // Etiqueta de Estado
-                if (isConfirmed)
-                  Text(
-                    'CONFIRMED',
-                    style: AppTypography.style(
-                      color: const Color(0xFF22C55E),
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  )
-                else if (isReserved)
-                  Text(
-                    'RESERVED',
-                    style: AppTypography.style(
-                      color: const Color(0xFF64748B),
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  )
-                else if (isWaitlist)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF97316).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: const Color(0xFFF97316).withValues(alpha: 0.4),
-                        width: 1.0,
-                      ),
-                    ),
-                    child: Text(
-                      'WAITLIST #${waitlistNumber ?? 1}',
-                      style: AppTypography.style(
-                        color: const Color(0xFFF97316),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                      ),
+                // Información del Usuario: Nombre, Correo y Rol Badge (tocable para abrir perfil)
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: isInstructor
+                        ? () => _openInstructorProfile(user)
+                        : null,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.style(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            // Badge de Rol
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: roleColor.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: roleColor.withValues(alpha: 0.35),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(roleIcon, size: 9.5, color: roleColor),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    roleLabel,
+                                    style: TextStyle(
+                                      color: roleColor,
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          email,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.style(
+                            color: const Color(0xFF64748B),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        if (isInstructor) ...[
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.touch_app_rounded,
+                                size: 11,
+                                color: Color(0xFF00BCEB),
+                              ),
+                              const SizedBox(width: 3),
+                              Expanded(
+                                child: Text(
+                                  'Toca para ver perfil completo',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: const Color(0xFF00BCEB)
+                                        .withValues(alpha: 0.85),
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
                   ),
+                ),
+
+                // Control Derecho: MENÚ DE 3 PUNTOS VERTICALES PARA CAMBIAR ROLES
+                // (Sin switches de asistencia / toggle eliminados)
+                PopupMenuButton<String>(
+                  icon: const Icon(
+                    Icons.more_vert_rounded,
+                    color: Color(0xFF94A3B8),
+                    size: 22,
+                  ),
+                  tooltip: 'Cambiar Rol',
+                  color: const Color(0xFF161E28),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: const BorderSide(color: Color(0xFF222C3D)),
+                  ),
+                  onSelected: (newRole) => _changeUserRole(user, newRole),
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'client',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.person_outline_rounded,
+                            color: isClient
+                                ? const Color(0xFF22C55E)
+                                : const Color(0xFF94A3B8),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Cliente',
+                            style: TextStyle(
+                              color: isClient
+                                  ? const Color(0xFF22C55E)
+                                  : Colors.white,
+                              fontWeight: isClient
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                          if (isClient) ...[
+                            const Spacer(),
+                            const Icon(
+                              Icons.check_rounded,
+                              color: Color(0xFF22C55E),
+                              size: 16,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'instructor',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.sports_rounded,
+                            color: isInstructor
+                                ? const Color(0xFF00BCEB)
+                                : const Color(0xFF94A3B8),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Instructor',
+                            style: TextStyle(
+                              color: isInstructor
+                                  ? const Color(0xFF00BCEB)
+                                  : Colors.white,
+                              fontWeight: isInstructor
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                          if (isInstructor) ...[
+                            const Spacer(),
+                            const Icon(
+                              Icons.check_rounded,
+                              color: Color(0xFF00BCEB),
+                              size: 16,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'admin',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.admin_panel_settings_rounded,
+                            color: isAdmin
+                                ? const Color(0xFFF97316)
+                                : const Color(0xFF94A3B8),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Administrador',
+                            style: TextStyle(
+                              color: isAdmin
+                                  ? const Color(0xFFF97316)
+                                  : Colors.white,
+                              fontWeight: isAdmin
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                          if (isAdmin) ...[
+                            const Spacer(),
+                            const Icon(
+                              Icons.check_rounded,
+                              color: Color(0xFFF97316),
+                              size: 16,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-
-          // Control Derecho: Switch cian para presentes, o 3 puntos para lista de espera
-          if (isWaitlist)
-            PopupMenuButton<String>(
-              icon: const Icon(
-                Icons.more_vert_rounded,
-                color: Color(0xFF64748B),
-                size: 20,
-              ),
-              color: const Color(0xFF161E28),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Color(0xFF222C3D)),
-              ),
-              onSelected: (action) {
-                if (action == 'promote') {
-                  _promoteWaitlistStudent(student);
-                } else if (action == 'remove') {
-                  _removeStudentFromRoster(student);
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'promote',
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.check_circle_outline_rounded,
-                        color: Color(0xFF00BCEB),
-                        size: 18,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Promover a Confirmado',
-                        style: TextStyle(color: Colors.white, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'remove',
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.delete_outline_rounded,
-                        color: Color(0xFFEF4444),
-                        size: 18,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Eliminar de Lista de Espera',
-                        style: TextStyle(
-                          color: Color(0xFFEF4444),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            )
-          else
-            Switch.adaptive(
-              value: isPresent,
-              activeThumbColor: Colors.white,
-              activeTrackColor: const Color(0xFF00BCEB),
-              inactiveThumbColor: const Color(0xFF94A3B8),
-              inactiveTrackColor: const Color(0xFF222C3D),
-              onChanged: (_) => _toggleStudentPresence(student),
-            ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildFab() {
     return GestureDetector(
-      onTap: _showAddStudentModal,
+      onTap: _showAddUserModal,
       child: Container(
         width: 52,
         height: 52,

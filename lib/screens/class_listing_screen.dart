@@ -5,6 +5,7 @@ import '../services/user_session_service.dart';
 import '../theme/app_theme.dart';
 import 'class_details_screen.dart';
 import 'create_edit_class_screen.dart';
+import 'instructor_profile_screen.dart';
 
 /// Pantalla de Lista de Clases (Schedule / Class Listing) para IRON PULSE.
 ///
@@ -1229,27 +1230,41 @@ class _ClassListingScreenState extends State<ClassListingScreen> {
                       ),
 
                       // Instructor
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.person_outline_rounded,
-                            color: Color(0xFF94A3B8),
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              'con ${instructor?.name ?? 'Instructor'}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTypography.style(
-                                color: const Color(0xFF94A3B8),
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w500,
+                      GestureDetector(
+                        onTap: () {
+                          if (instructor != null) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => InstructorProfileScreen(
+                                  instructor: instructor,
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.person_outline_rounded,
+                              color: Color(0xFF94A3B8),
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                'con ${instructor?.name ?? 'Instructor'}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.style(
+                                  color: const Color(0xFF00BCEB),
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
 
                       // Fila inferior: Disponibilidad/Estado + Botón Acción

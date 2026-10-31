@@ -4,6 +4,7 @@ import 'enums.dart';
 class UserProfileModel {
   final String id;
   final String? fullName;
+  final String? email;
   final String? avatarUrl;
   final UserRole role;
   final DateTime? updatedAt;
@@ -11,6 +12,7 @@ class UserProfileModel {
   const UserProfileModel({
     required this.id,
     this.fullName,
+    this.email,
     this.avatarUrl,
     this.role = UserRole.client,
     this.updatedAt,
@@ -20,10 +22,20 @@ class UserProfileModel {
   bool get isInstructor => role == UserRole.instructor;
   bool get isClient => role == UserRole.client;
 
+  String get displayEmail {
+    if (email != null && email!.isNotEmpty) return email!;
+    if (fullName != null && fullName!.isNotEmpty) {
+      final clean = fullName!.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '.');
+      return '$clean@ironpulse.fit';
+    }
+    return 'usuario@ironpulse.fit';
+  }
+
   factory UserProfileModel.fromJson(Map<String, dynamic> json) {
     return UserProfileModel(
       id: json['id'] as String,
       fullName: json['full_name'] as String?,
+      email: json['email'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       role: UserRole.fromString(json['role'] as String?),
       updatedAt: json['updated_at'] != null
@@ -35,6 +47,7 @@ class UserProfileModel {
   UserProfileModel copyWith({
     String? id,
     String? fullName,
+    String? email,
     String? avatarUrl,
     UserRole? role,
     DateTime? updatedAt,
@@ -42,6 +55,7 @@ class UserProfileModel {
     return UserProfileModel(
       id: id ?? this.id,
       fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       role: role ?? this.role,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -52,6 +66,7 @@ class UserProfileModel {
     return {
       'id': id,
       'full_name': fullName,
+      if (email != null) 'email': email,
       'avatar_url': avatarUrl,
       'role': role.toDbString(),
       'updated_at': updatedAt?.toUtc().toIso8601String(),

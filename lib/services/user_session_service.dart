@@ -64,6 +64,26 @@ class UserSessionService extends ChangeNotifier {
     }
   }
 
+  /// Establece manualmente el perfil y rol (para demo / prueba rápida o sugeridos)
+  void setManualSession({
+    required String name,
+    required UserRole role,
+    String? email,
+    String? id,
+    String? avatarUrl,
+  }) {
+    _cachedRole = role;
+    _profile = UserProfileModel(
+      id: id ?? (role == UserRole.instructor ? 'e1111111-1111-1111-1111-111111111111' : 'demo-${role.toDbString()}'),
+      fullName: name,
+      email: email,
+      role: role,
+      avatarUrl: avatarUrl ?? (role == UserRole.instructor ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200' : null),
+    );
+    _isLoading = false;
+    notifyListeners();
+  }
+
   /// Indica si se está cargando o sincronizando el rol
   bool get isLoading => _isLoading;
 
@@ -116,6 +136,8 @@ class UserSessionService extends ChangeNotifier {
       }
 
       final client = Supabase.instance.client;
+      final currentEmail = currentUser?.email ?? '';
+      final metaRole = currentUser?.userMetadata?['role']?.toString().toLowerCase();
 
       // Consulta a la tabla 'profiles' para obtener el campo 'role'
       final data = await client
@@ -124,15 +146,38 @@ class UserSessionService extends ChangeNotifier {
           .eq('id', uid)
           .maybeSingle();
 
-      if (data != null) {
-        _profile = UserProfileModel.fromJson(data);
-        _cachedRole = _profile!.role;
+      UserProfileModel? loadedProfile =
+          data != null ? UserProfileModel.fromJson(data) : null;
+      final resolvedName = loadedProfile?.fullName ?? displayName;
+
+      // Prioridad Instructor: si está en auth metadata, en overrides de sesión, en instructors table o en demo
+      final isInst = metaRole == 'instructor' ||
+          (DatabaseService.instance.getSessionOverride(uid)?.role == UserRole.instructor) ||
+          (resolvedName.isNotEmpty &&
+              DatabaseService.instance.getSessionOverride(resolvedName)?.role == UserRole.instructor) ||
+          await DatabaseService.instance.checkIfUserIsInstructor(
+            userId: uid,
+            userName: resolvedName,
+            email: currentEmail,
+          );
+
+      if (isInst) {
+        _cachedRole = UserRole.instructor;
+        _profile = (loadedProfile ??
+                UserProfileModel(
+                  id: uid,
+                  fullName: resolvedName,
+                  email: currentEmail,
+                  role: UserRole.instructor,
+                ))
+            .copyWith(role: UserRole.instructor);
+      } else if (loadedProfile != null) {
+        _profile = loadedProfile;
+        _cachedRole = loadedProfile.role;
       } else {
         // Manejo de error si el perfil no existe en la tabla profiles:
-        // Se intenta recuperar rol desde los metadatos de auth y se asegura el perfil
         debugPrint('Aviso: Perfil no encontrado para uid=$uid. Asegurando perfil por defecto...');
-        final metaRoleString = currentUser?.userMetadata?['role'] as String?;
-        final resolvedRole = UserRole.fromString(metaRoleString);
+        final resolvedRole = UserRole.fromString(metaRole);
 
         _profile = await DatabaseService.instance.ensureUserProfile(
           userId: uid,

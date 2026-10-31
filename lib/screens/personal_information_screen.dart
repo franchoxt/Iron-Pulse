@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/user_session_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/avatar_image_helper.dart';
 
 /// Pantalla de Información Personal / Edit Profile para IRON PULSE.
 ///
@@ -235,24 +236,59 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
                       width: 2.4,
                     ),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(40),
-                    child: Image.network(
-                      tempSelected,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: const Color(0xFF161E28),
-                        child: const Icon(
-                          Icons.person,
-                          color: Color(0xFF00BCEB),
-                          size: 40,
-                        ),
-                      ),
-                    ),
+                  child: CircleAvatar(
+                    radius: 38,
+                    backgroundColor: const Color(0xFF161E28),
+                    backgroundImage: AvatarImageHelper.getAvatarImageProvider(tempSelected),
+                    child: AvatarImageHelper.getAvatarImageProvider(tempSelected) == null
+                        ? const Icon(Icons.person, color: Color(0xFF00BCEB), size: 40)
+                        : null,
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
+
+              // Botón Galería del Dispositivo
+              GestureDetector(
+                onTap: () async {
+                  final picked = await AvatarImageHelper.pickFromGallery();
+                  if (picked != null && picked.isNotEmpty) {
+                    setModalState(() {
+                      tempSelected = picked;
+                      urlController.clear();
+                    });
+                  }
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00BCEB).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0xFF00BCEB).withValues(alpha: 0.4),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.photo_library_rounded, color: Color(0xFF00BCEB), size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Elegir de la Galería',
+                        style: AppTypography.style(
+                          color: const Color(0xFF00BCEB),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
 
               // Grid de avatares predeterminados
               SizedBox(
@@ -641,20 +677,22 @@ class _PersonalInformationScreenState extends State<PersonalInformationScreen> {
               ),
               child: Padding(
                 padding: const EdgeInsets.all(4),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(60),
-                  child: Image.network(
+                child: CircleAvatar(
+                  radius: 56,
+                  backgroundColor: const Color(0xFF161E28),
+                  backgroundImage: AvatarImageHelper.getAvatarImageProvider(
                     _avatarUrl ?? _presetAvatars[0],
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: const Color(0xFF161E28),
-                      child: const Icon(
-                        Icons.person,
-                        color: Color(0xFF00BCEB),
-                        size: 54,
-                      ),
-                    ),
                   ),
+                  child: AvatarImageHelper.getAvatarImageProvider(
+                            _avatarUrl ?? _presetAvatars[0],
+                          ) ==
+                          null
+                      ? const Icon(
+                          Icons.person,
+                          color: Color(0xFF00BCEB),
+                          size: 54,
+                        )
+                      : null,
                 ),
               ),
             ),
