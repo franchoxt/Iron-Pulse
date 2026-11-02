@@ -51,7 +51,7 @@ class _AuthScreenState extends State<AuthScreen> {
     return Scaffold(
       body: PageView(
         controller: _pageController,
-        physics: const BouncingScrollPhysics(),
+        physics: const NeverScrollableScrollPhysics(),
         onPageChanged: (pageIndex) {
           setState(() {
             _currentTab = pageIndex == 0 ? AuthTab.login : AuthTab.register;

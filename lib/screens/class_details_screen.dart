@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../services/user_session_service.dart';
 import '../theme/app_theme.dart';
+import 'class_attendance_screen.dart';
 import 'instructor_profile_screen.dart';
 
 /// Pantalla de Detalles de la Clase para IRON PULSE.
@@ -1250,6 +1252,64 @@ class _ClassDetailsScreenState extends State<ClassDetailsScreen> {
   }
 
   Widget _buildBottomStickyBar(double price, bool isWaitlist) {
+    if (UserSessionService.instance.isInstructor) {
+      return Container(
+        padding: EdgeInsets.only(
+          left: 22,
+          right: 22,
+          top: 14,
+          bottom: MediaQuery.of(context).padding.bottom + 14,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0C1017).withValues(alpha: 0.96),
+          border: const Border(
+            top: BorderSide(color: Color(0xFF1E293B), width: 1.2),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.5),
+              blurRadius: 16,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ClassAttendanceScreen(schedule: widget.schedule),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.checklist_rtl_rounded, color: Colors.white, size: 20),
+                  label: const Text(
+                    'Tomar Asistencia',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00BCEB),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: EdgeInsets.only(
         left: 22,

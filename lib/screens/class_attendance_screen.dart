@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../theme/app_theme.dart';
+import 'class_details_screen.dart';
 
 /// Pantalla de Gestión de Asistencia de Clase (Class Attendance) para Instructores.
 ///
@@ -194,14 +195,55 @@ class _ClassAttendanceScreenState extends State<ClassAttendanceScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Toma de Asistencia',
-          style: AppTypography.style(
-            color: const Color(0xFF00BCEB),
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.5,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Toma de Asistencia',
+              style: AppTypography.style(
+                color: const Color(0xFF00BCEB),
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
+            ),
+            GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ClassDetailsScreen(schedule: schedule),
+                  ),
+                );
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00BCEB).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF00BCEB).withValues(alpha: 0.3),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.info_outline_rounded, color: Color(0xFF00BCEB), size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Ver Info',
+                      style: AppTypography.style(
+                        color: const Color(0xFF00BCEB),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 4),
         Text(

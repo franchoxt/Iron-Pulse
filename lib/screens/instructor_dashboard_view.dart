@@ -7,6 +7,7 @@ import '../services/user_session_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/avatar_image_helper.dart';
 import 'class_attendance_screen.dart';
+import 'class_details_screen.dart';
 
 /// Vista de Dashboard para el Instructor (IRON PULSE).
 ///
@@ -433,172 +434,185 @@ class _InstructorDashboardViewState extends State<InstructorDashboardView> {
     final totalSessions = _totalSessionsForClass(gymClass?.name, schedule.classId);
     final enrolled = schedule.confirmedBookingsCount;
 
-    return Container(
-      width: 228,
-      decoration: BoxDecoration(
-        color: const Color(0xFF141C26),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF1E2836), width: 1),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Cover Image con Badges de Categoría e Intensidad
-          SizedBox(
-            height: 108,
-            width: double.infinity,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: const Color(0xFF1A2332),
-                    child: const Icon(
-                      Icons.fitness_center_rounded,
-                      color: Color(0xFF64748B),
-                      size: 36,
-                    ),
-                  ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.35),
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.55),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 9,
-                  left: 9,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.65),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      categoryName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ClassDetailsScreen(schedule: schedule),
+            ),
+          );
+        },
+        child: Container(
+          width: 228,
+          decoration: BoxDecoration(
+            color: const Color(0xFF141C26),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF1E2836), width: 1),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Cover Image con Badges de Categoría e Intensidad
+              SizedBox(
+                height: 108,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: const Color(0xFF1A2332),
+                        child: const Icon(
+                          Icons.fitness_center_rounded,
+                          color: Color(0xFF64748B),
+                          size: 36,
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                Positioned(
-                  top: 9,
-                  right: 9,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                    decoration: BoxDecoration(
-                      color: _getIntensityColor(intensity),
-                      borderRadius: BorderRadius.circular(10),
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.35),
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.55),
+                          ],
+                        ),
+                      ),
                     ),
-                    child: Text(
-                      _getIntensityLabel(intensity),
+                    Positioned(
+                      top: 9,
+                      left: 9,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          categoryName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 9,
+                      right: 9,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: _getIntensityColor(intensity),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _getIntensityLabel(intensity),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Contenido de la Tarjeta
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      schedule.className,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 10,
+                        fontSize: 15,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        const Icon(Icons.access_time_rounded, color: Color(0xFF94A3B8), size: 12),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$duration min',
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.calendar_today_rounded,
+                          color: upcomingCount > 0 ? const Color(0xFF22C55E) : const Color(0xFF64748B),
+                          size: 11.5,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$upcomingCount upcoming',
+                          style: TextStyle(
+                            color: upcomingCount > 0 ? const Color(0xFF22C55E) : const Color(0xFF64748B),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    // Conteo de Alumnos Inscritos
+                    Row(
+                      children: [
+                        const Icon(Icons.people_outline_rounded, color: Color(0xFF00BCEB), size: 13),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$enrolled alumnos inscritos',
+                          style: const TextStyle(
+                            color: Color(0xFF00BCEB),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        const Icon(Icons.leaderboard_outlined, color: Color(0xFF64748B), size: 12),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$totalSessions total sessions',
+                          style: const TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-
-          // Contenido de la Tarjeta
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  schedule.className,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time_rounded, color: Color(0xFF94A3B8), size: 12),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$duration min',
-                      style: const TextStyle(
-                        color: Color(0xFF94A3B8),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.calendar_today_rounded,
-                      color: upcomingCount > 0 ? const Color(0xFF22C55E) : const Color(0xFF64748B),
-                      size: 11.5,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$upcomingCount upcoming',
-                      style: TextStyle(
-                        color: upcomingCount > 0 ? const Color(0xFF22C55E) : const Color(0xFF64748B),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 7),
-                // Conteo de Alumnos Inscritos
-                Row(
-                  children: [
-                    const Icon(Icons.people_outline_rounded, color: Color(0xFF00BCEB), size: 13),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$enrolled alumnos inscritos',
-                      style: const TextStyle(
-                        color: Color(0xFF00BCEB),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    const Icon(Icons.leaderboard_outlined, color: Color(0xFF64748B), size: 12),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$totalSessions total sessions',
-                      style: const TextStyle(
-                        color: Color(0xFF64748B),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
